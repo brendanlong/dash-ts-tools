@@ -11,6 +11,8 @@ def _to_json(o):
             return o.decode("ASCII")
         except:
             return b64encode(o)
+    if isinstance(o, set):
+        return list(o)
     return o.__dict__
 
 class Box(object):
@@ -32,14 +34,20 @@ class Box(object):
 
 
 class StypBox(Box):
-    def __init__(self, major_brand, minor_version=0, compatible_brands = None):
+    def __init__(self, major_brand, minor_version=0, compatible_brands=None):
         super().__init__("styp")
 
         if isinstance(major_brand, str):
             major_brand = major_brand.encode("ASCII")
         self.major_brand = major_brand
         self.minor_version = minor_version
-        self.compatible_brands = compatible_brands if compatible_brands else []
+
+        self.compatible_brands = set()
+        self.compatible_brands.add(major_brand)
+        for brand in compatible_brands or []:
+            if isinstance(brand, str):
+                brand = brand.encode("ASCII")
+            self.compatible_brands.add(brand)
 
     @property
     def size(self):
