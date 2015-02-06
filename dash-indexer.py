@@ -23,10 +23,12 @@ def index_media_segment(media_file_name, template, force, verbose):
                         "at byte offset", byte_offset, "for PID",
                         ts_packet.pid)
                 random_access_points[ts_packet.pid].append(byte_offset)
+    eof = byte_offset
 
     boxes = [StypBox("sisx")]
 
     for pid, byte_offsets in random_access_points.items():
+        byte_offsets.append(eof)
         sidx = SidxBox()
         sidx.reference_id = pid
         previous_start = None
