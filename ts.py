@@ -1,6 +1,8 @@
-from base64 import b64encode
 from bitstring import BitStream
+from collections import defaultdict
+from common import to_json
 import json
+import struct
 
 
 class TSPacket(object):
@@ -101,16 +103,53 @@ class TSPacket(object):
             self.elementary_stream_priority_indicator = None
 
         if has_payload:
-            self.payload = data.tobytes()
+            self.payload = data.read("bytes")
         else:
             self.payload = None
 
     def __repr__(self):
-        d = self.__dict__.copy()
-        to_remove = []
-        for key, value in list(d.items()):
-            if value is None:
-                del d[key]
-        if "payload" in d:
-            d["payload"] = b64encode(d["payload"]).decode("UTF-8")
-        return json.dumps(d)
+        return json.dumps(self, default=to_json)
+
+
+class ProgramAssociationTable(object):
+    PID = 0x00
+    TABLE_ID = 0x00
+
+    def __init__(self, data):
+        data = BitStream(data)
+        pointer_field = data.read("uint:8")
+        if pointer_field:
+            data.read(pointer_field)
+
+        self.table_id = data.read("uint:8")
+        if self.table_id != self.TABLE_ID:
+            raise Exception("table_id for PAT is {} but should be {}".format(
+                self.table_id, self.TABLE_ID))
+        self.section_syntax_indicator = data.read("bool")
+        self.private_indicator = data.read("bool")
+        data.read("uint:2") # reserved
+        section_length = data.read("uint:12")
+        self.transport_stream_id = data.read("uint:16")
+        data.read("uint:2") # reserved
+        self.version_number = data.read("uint:5")
+        self.current_next_indicator = data.read("bool")
+        self.section_number = data.read("uint:8")
+        self.last_section_number = data.read("uint:8")
+
+        num_programs = (section_length - 9) // 4
+        self.programs = {}
+        for i in range(num_programs):
+            program_number = data.read("uint:16")
+            data.read("uint:3") # reserved
+            pid = data.read("uint:13")
+            self.programs[program_number] = pid
+        self.crc = data.read("uint:32")
+
+        while data.bytepos < len(data.bytes):
+            padding_byte = data.read("uint:8")
+            if padding_byte != 0xFF:
+                raise Exception("Padding byte at end of PAT was 0x{:X} but should "
+                    "be 0xFF".format(padding_byte))
+
+    def __repr__(self):
+        return json.dumps(self, default=to_json)

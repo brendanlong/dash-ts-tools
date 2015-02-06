@@ -1,19 +1,9 @@
-from base64 import b64encode
 import bitstring
 from bitstring import BitStream
+from common import to_json
 import json
 import struct
 
-
-def _to_json(o):
-    if isinstance(o, bytes):
-        try:
-            return o.decode("ASCII")
-        except:
-            return b64encode(o)
-    if isinstance(o, set):
-        return list(o)
-    return o.__dict__
 
 class Box(object):
     def __init__(self, type):
@@ -30,7 +20,7 @@ class Box(object):
         return struct.pack("!I4s", self.size, self.type)
 
     def __repr__(self):
-        return json.dumps(self, default=_to_json)
+        return json.dumps(self, default=to_json)
 
 
 class StypBox(Box):
