@@ -55,8 +55,8 @@ class StypBox(Box):
 
     @property
     def bytes(self):
-        binary = super().bytes + struct.pack("!4sII", self.major_brand,
-            self.minor_version, len(self.compatible_brands))
+        binary = super().bytes + struct.pack("!4sI", self.major_brand,
+            self.minor_version)
         for brand in self.compatible_brands:
             binary += struct.pack("!4s", brand)
         return binary
@@ -130,10 +130,10 @@ class SidxBox(FullBox):
         binary = super().bytes + struct.pack("!II", self.reference_id,
             self.timescale)
         if self.version == 0:
-            binary += struct.pack("!QQ", self.earliest_presentation_time,
+            binary += struct.pack("!II", self.earliest_presentation_time,
                 self.first_offset)
         else:
-            binary += struct.pack("!II", self.earliest_presentation_time,
+            binary += struct.pack("!QQ", self.earliest_presentation_time,
                 self.first_offset)
         binary += struct.pack("!HH", 0, len(self.references))
         for reference in self.references:
