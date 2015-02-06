@@ -2,6 +2,7 @@
 import argparse
 from collections import defaultdict
 from itertools import count
+import os
 from ts import TSPacket
 from isobmff import SidxBox, SidxReference, StypBox
 
@@ -38,10 +39,22 @@ def index_media_segment(media_file_name, template, force, verbose):
         boxes.append(sidx)
 
     if verbose:
-        print("Writing boxes:")
+        print("Boxes to write are:")
         for box in boxes:
             print(box)
 
+    segment_prefix, _ = os.path.splitext(media_file_name)
+    output_file_name = template.format_map({"s": segment_prefix})
+    if verbose:
+        print("Writing single segment index to", output_file_name)
+    if not force and os.path.exists(output_file_name):
+        choice = input("Output file {} already exists. Overwrite it? y/N" \
+            .format(output_file_name)).lower()
+        if choice != 'y':
+            return
+    with open(output_file_name, "wb") as f:
+        for box in boxes:
+            f.write(box.bytes)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
