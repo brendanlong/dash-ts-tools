@@ -9,6 +9,7 @@ from isobmff import SidxBox, SidxReference, StypBox
 
 def index_media_segment(media_file_name, template, force, verbose):
     random_access_points = defaultdict(list)
+    first_offset = {}
     if verbose:
         print("Reading media file", media_file_name)
     with open(media_file_name, "rb") as f:
@@ -17,6 +18,8 @@ def index_media_segment(media_file_name, template, force, verbose):
             if not ts_data:
                 break
             ts_packet = TSPacket(ts_data)
+            if ts_packet.pid not in first_offset:
+                first_offset[ts_packet.pid] = byte_offset
             if ts_packet.random_access_indicator:
                 if verbose:
                     print("Found TS packet with random_access_indicator = 1 "
@@ -31,6 +34,7 @@ def index_media_segment(media_file_name, template, force, verbose):
         byte_offsets.append(eof)
         sidx = SidxBox()
         sidx.reference_id = pid
+        sidx.first_offset = first_offset[pid]
         previous_start = None
         for byte_offset in byte_offsets:
             if previous_start is not None:
