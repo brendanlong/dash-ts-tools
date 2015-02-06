@@ -1,7 +1,17 @@
 from base64 import b64encode
+import bitstring
+from bitstring import BitStream
 import json
 import struct
 
+
+def _to_json(o):
+    if isinstance(o, bytes):
+        try:
+            return o.decode("ASCII")
+        except:
+            return b64encode(o)
+    return o.__dict__
 
 class Box(object):
     def __init__(self, type):
@@ -18,16 +28,7 @@ class Box(object):
         return struct.pack("!I4s", self.size, self.type)
 
     def __repr__(self):
-        d = self.__dict__.copy()
-        for key, value in list(d.items()):
-            if value is None:
-                del d[key]
-            elif isinstance(value, bytes):
-                try:
-                    d[key] = value.decode("ASCII")
-                except:
-                    d[key] = b64encode(value)
-        return json.dumps(d)
+        return json.dumps(self, default=_to_json)
 
 
 class StypBox(Box):
@@ -50,4 +51,83 @@ class StypBox(Box):
             self.minor_version, len(self.compatible_brands))
         for brand in self.compatible_brands:
             binary += struct.pack("!4s", brand)
+        return binary
+
+
+class FullBox(Box):
+    def __init__(self, type, version, flags):
+        super().__init__(type)
+
+        self.version = version
+        self.flags = flags
+
+    @property
+    def size(self):
+        return Box.size.fget(self) + 4
+
+    @property
+    def bytes(self):
+        return Box.bytes.fget(self) + struct.pack("!BBH",
+            self.version, self.flags >> 16, self.flags & 0xFF)
+        return binary
+
+
+class SidxReference(object):
+    class ReferenceType:
+        MEDIA = 0
+        INDEX = 1
+
+    def __init__(self, reference_type):
+        self.reference_type = reference_type
+        self.referenced_size = 0
+        self.subsegment_duration = 0
+        self.starts_with_sap = 0
+        self.sap_type = 0
+        self.sap_delta_time = 0
+
+    @property
+    def size(self):
+        return 12
+
+    @property
+    def bytes(self):
+        return bitstring.pack("bool, uint:31, uint:32, bool, uint:3, uint:28",
+            self.reference_type, self.referenced_size, self.subsegment_duration,
+            self.starts_with_sap, self.sap_type, self.sap_delta_time).bytes
+
+
+class SidxBox(FullBox):
+    def __init__(self, version=0):
+        super().__init__("sidx", version, 0)
+
+        self.reference_id = 0
+        self.timescale = 90000
+        self.earliest_presentation_time = 0
+        self.first_offset = 0
+        self.references = []
+
+    @property
+    def size(self):
+        total = super().size + 12
+        if self.version == 0:
+            total += 8
+        else:
+            total += 16
+        for reference in self.references:
+            total += reference.size
+        return total
+
+    @property
+    def bytes(self):
+        binary = super().bytes + struct.pack("!II", self.reference_id,
+            self.timescale)
+        if self.version == 0:
+            binary += struct.pack("!QQ", self.earliest_presentation_time,
+                self.first_offset)
+        else:
+            binary += struct.pack("!II", self.earliest_presentation_time,
+                self.first_offset)
+        binary += struct.pack("!HH", 0, len(self.references))
+        for reference in self.references:
+            binary += reference.bytes
         return binary
