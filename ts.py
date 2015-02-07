@@ -66,8 +66,8 @@ class TSPacket(object):
 
             if transport_private_data_flag:
                 transport_private_data_length = data.read("uint:8")
-                self.private_data = data.read(transport_private_data_length) \
-                    .bytes
+                self.private_data = data.read(transport_private_data_length \
+                    * 8).bytes
 
             if adaptation_field_extension_flag:
                 adaptation_field_extension_length = data.read("uint:8")
@@ -127,10 +127,10 @@ class ProgramAssociationTable(object):
                 self.table_id, self.TABLE_ID))
         self.section_syntax_indicator = data.read("bool")
         self.private_indicator = data.read("bool")
-        data.read("uint:2") # reserved
+        data.read(2) # reserved
         section_length = data.read("uint:12")
         self.transport_stream_id = data.read("uint:16")
-        data.read("uint:2") # reserved
+        data.read(2) # reserved
         self.version_number = data.read("uint:5")
         self.current_next_indicator = data.read("bool")
         self.section_number = data.read("uint:8")
@@ -140,9 +140,96 @@ class ProgramAssociationTable(object):
         self.programs = {}
         for i in range(num_programs):
             program_number = data.read("uint:16")
-            data.read("uint:3") # reserved
+            data.read(3) # reserved
             pid = data.read("uint:13")
             self.programs[program_number] = pid
+        self.crc = data.read("uint:32")
+
+        while data.bytepos < len(data.bytes):
+            padding_byte = data.read("uint:8")
+            if padding_byte != 0xFF:
+                raise Exception("Padding byte at end of PAT was 0x{:X} but should "
+                    "be 0xFF".format(padding_byte))
+
+    def __repr__(self):
+        return json.dumps(self, default=to_json)
+
+
+class Descriptor(object):
+    def __init__(self, data):
+        self.tag = data.read("uint:8")
+        length = data.read("uint:8")
+        self.contents = data.read(length * 8).bytes
+
+    @property
+    def size(self):
+        return 2 + len(self.contents)
+
+    def __repr__(self):
+        return json.dumps(self, default=to_json)
+
+    @staticmethod
+    def read_descriptors(data, size):
+        total = 0
+        descriptors = []
+        while total < size:
+            descriptor = Descriptor(data)
+            descriptors.append(descriptor)
+            total += descriptor.size
+        if total != size:
+            raise Exception("Excepted {} byts of descriptors, but got "
+                "{} bytes of descriptors.".format(size, total))
+        return descriptors
+
+
+class Stream(object):
+    def __init__(self, data):
+        self.stream_type = data.read("uint:8")
+        data.read(3) # reserved
+        self.elementary_pid = data.read("uint:13")
+        data.read(4) # reserved
+        es_info_length = data.read("uint:12")
+        self.descriptors = Descriptor.read_descriptors(data, es_info_length)
+
+
+class ProgramMapTable(object):
+    TABLE_ID = 0x02
+
+    def __init__(self, data):
+        data = BitStream(data)
+        pointer_field = data.read("uint:8")
+        if pointer_field:
+            data.read(pointer_field)
+
+        self.table_id = data.read("uint:8")
+        if self.table_id != self.TABLE_ID:
+            raise Exception("table_id for PMT is {} but should be {}".format(
+                self.table_id, self.TABLE_ID))
+        self.section_syntax_indicator = data.read("bool")
+        self.private_indicator = data.read("bool")
+        data.read(2) # reserved
+        section_length = data.read("uint:12")
+
+        self.program_number = data.read("uint:16")
+        data.read(2) # reserved
+        self.version_number = data.read("uint:5")
+        self.current_next_indicator = data.read("bool")
+        self.section_number = data.read("uint:8")
+        self.last_section_number = data.read("uint:8")
+
+        data.read(3) # reserved
+        self.pcr_pid = data.read("uint:13")
+
+        data.read(4) # reserved
+        program_info_length = data.read("uint:12")
+        self.descriptors = Descriptor.read_descriptors(data,
+            program_info_length)
+
+        self.streams = {}
+        while data.bytepos < section_length + 3 - 4:
+            stream = Stream(data)
+            self.streams[stream.elementary_pid] = stream
+
         self.crc = data.read("uint:32")
 
         while data.bytepos < len(data.bytes):

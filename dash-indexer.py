@@ -3,7 +3,7 @@ import argparse
 from collections import defaultdict
 from itertools import count
 import os
-from ts import ProgramAssociationTable, TSPacket
+from ts import ProgramAssociationTable, ProgramMapTable, TSPacket
 from isobmff import SidxBox, SidxReference, StypBox
 
 
@@ -13,16 +13,27 @@ def index_media_segment(media_file_name, template, force, verbose):
     if verbose:
         print("Reading media file", media_file_name)
     with open(media_file_name, "rb") as f:
+        pmt_pid = None
+        pmt_pids = set()
         for byte_offset in count(step=TSPacket.SIZE):
             ts_data = f.read(TSPacket.SIZE)
             if not ts_data:
                 break
             ts_packet = TSPacket(ts_data)
+
             if ts_packet.pid == ProgramAssociationTable.PID:
                 pat = ProgramAssociationTable(ts_packet.payload)
                 if len(pat.programs) != 1:
                     raise Exception("PAT has {} programs, but DASH only "
                         "allows 1 program.".format(len(pat.programs)))
+                for value in pat.programs.values():
+                    pmt_pid = value
+                    break
+
+            elif ts_packet.pid == pmt_pid:
+                pmt = ProgramMapTable(ts_packet.payload)
+                print(pmt)
+
             if ts_packet.pid not in first_offset:
                 first_offset[ts_packet.pid] = byte_offset
             if ts_packet.random_access_indicator:
