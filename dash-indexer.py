@@ -3,7 +3,7 @@ import argparse
 from collections import defaultdict
 from itertools import count
 import os
-from ts import ProgramAssociationTable, ProgramMapTable, TSPacket
+from ts import PESReader, ProgramAssociationTable, ProgramMapTable, TSPacket
 from isobmff import SidxBox, SidxReference, StypBox
 
 
@@ -14,7 +14,7 @@ def index_media_segment(media_file_name, template, force, verbose):
         print("Reading media file", media_file_name)
     with open(media_file_name, "rb") as f:
         pmt_pid = None
-        pmt_pids = set()
+        pes_readers = {}
         for byte_offset in count(step=TSPacket.SIZE):
             ts_data = f.read(TSPacket.SIZE)
             if not ts_data:
@@ -32,16 +32,22 @@ def index_media_segment(media_file_name, template, force, verbose):
 
             elif ts_packet.pid == pmt_pid:
                 pmt = ProgramMapTable(ts_packet.payload)
-                print(pmt)
+                for pid in pmt.streams:
+                    pes_readers[pid] = PESReader(verbose)
 
-            if ts_packet.pid not in first_offset:
-                first_offset[ts_packet.pid] = byte_offset
-            if ts_packet.random_access_indicator:
-                if verbose:
-                    print("Found TS packet with random_access_indicator = 1 "
-                        "at byte offset", byte_offset, "for PID",
-                        ts_packet.pid)
-                random_access_points[ts_packet.pid].append(byte_offset)
+            elif ts_packet.pid in pes_readers:
+                pes_packet = pes_readers[ts_packet.pid].add_ts_packet(ts_packet)
+                if pes_packet:
+                    pass
+
+                if ts_packet.pid not in first_offset:
+                    first_offset[ts_packet.pid] = byte_offset
+                if ts_packet.random_access_indicator:
+                    if verbose:
+                        print("Found TS packet with random_access_indicator = "
+                            "1 at byte offset", byte_offset, "for PID",
+                            ts_packet.pid)
+                    random_access_points[ts_packet.pid].append(byte_offset)
     eof = byte_offset
 
     boxes = [StypBox("sisx")]

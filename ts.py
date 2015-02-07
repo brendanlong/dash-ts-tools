@@ -88,15 +88,18 @@ class TSPacket(object):
                     self.splice_type = data.read("uint:4")
                     self.dts_next_au = data.read("uint:3")
                     if not data.read("bool"):
-                        raise Exception("First market bit in seamless splice "
+                        raise Exception("First marker bit in seamless splice "
                             "section of header is not 1.")
-                    self.ts_next_au = self.ts_next_au << 3 \
+                    self.ts_next_au = (self.ts_next_au << 15) \
                         + data.read("uint:15")
                     if not data.read("bool"):
-                        raise Exception("Second market bit in seamless splice "
+                        raise Exception("Second marker bit in seamless splice "
                             "section of header is not 1.")
-                    self.ts_next_au = self.ts_next_au << 15 \
+                    self.ts_next_au = (self.ts_next_au << 15) \
                         + data.read("uint:15")
+                    if not data.read("bool"):
+                        raise Exception("Third marker bit in seamless splice "
+                            "section of header is not 1.")
         else:
             self.discontinuity_indicator = None
             self.random_access_indicator = None
@@ -235,8 +238,142 @@ class ProgramMapTable(object):
         while data.bytepos < len(data.bytes):
             padding_byte = data.read("uint:8")
             if padding_byte != 0xFF:
-                raise Exception("Padding byte at end of PAT was 0x{:X} but should "
+                raise Exception("Padding byte at end of PAT was 0x{:02X} but should "
                     "be 0xFF".format(padding_byte))
 
     def __repr__(self):
         return json.dumps(self, default=to_json)
+
+
+class PESReader(object):
+    def __init__(self, verbose):
+        self.verbose = verbose
+        self.ts_packets = []
+        self.length = None
+        self.data = []
+
+    def add_ts_packet(self, ts_packet):
+        if not self.ts_packets and not ts_packet.payload_unit_start_indicator:
+            if self.verbose:
+                print("Warning: First TS packet for PID 0x{:02X} does not have "
+                    "payload_unit_start_indicator = 1. Ignoring this "
+                    "packet.".format(ts_packet.pid))
+            return None
+
+        self.ts_packets.append(ts_packet)
+        if ts_packet.payload:
+            self.data.extend(ts_packet.payload)
+        if self.length is None and len(self.data) >= 6:
+            self.length, = struct.unpack("!xxxxH", bytes(self.data[:6]))
+            self.length -= 6
+
+        if len(self.data) < self.length:
+            return None
+
+        try:
+            pes_packet = PESPacket(bytes(self.data), self.ts_packets)
+        except Exception as e:
+            print("Warning:", e)
+            pes_packet = None
+
+        self.ts_packets = []
+        self.data = []
+        self.length = None
+        return pes_packet
+
+
+class StreamID(object):
+    PROGRAM_STREAM_MAP = 0xBC
+    PADDING = 0xBE
+    PRIVATE_2 = 0xBF
+    ECM = 0xF0
+    EMM = 0xF1
+    PROGRAM_STREAM_DIRECTORY = 0xFF
+    DSMCC = 0xF2
+    H222_1_TYPE_E = 0xF8
+
+    @staticmethod
+    def has_pes_header(id):
+        return id != StreamID.PROGRAM_STREAM_MAP \
+            and id != StreamID.PADDING \
+            and id != StreamID.PRIVATE_2 \
+            and id != StreamID.ECM \
+            and id != StreamID.EMM \
+            and id != StreamID.PROGRAM_STREAM_DIRECTORY \
+            and id != StreamID.DSMCC \
+            and id != StreamID.H222_1_TYPE_E
+
+
+class PESPacket(object):
+    def __init__(self, data, ts_packets):
+        self.ts_packets = ts_packets
+        data = BitStream(data)
+
+        start_code = data.read("uint:24")
+        if start_code != 0x000001:
+            raise Exception("packet_start_code_prefix is 0x{:06X} but should "
+                "be 0x000001".format(start_code))
+
+        self.stream_id = data.read("uint:8")
+        pes_packet_length = data.read("uint:16")
+
+        if StreamID.has_pes_header(self.stream_id):
+            bits = data.read("uint:2")
+            if bits != 2:
+                raise Exception("First 2 bits of a PES header should be 0x2 "
+                    "but saw 0x{:02X}'".format(bits))
+
+            self.pes_scrambling_control = data.read("uint:2")
+            self.pes_priority = data.read("bool")
+            self.data_alignment_indicator = data.read("bool")
+            self.copyright = data.read("bool")
+            self.original_or_copy = data.read("bool")
+            pts_dts_flags = data.read("uint:2")
+            escr_flag = data.read("bool")
+            es_rate_flag = data.read("bool")
+            dsm_trick_mode_flag = data.read("bool")
+            additional_copy_info_flag = data.read("bool")
+            pes_crc_flag = data.read("bool")
+            pes_extension_flag = data.read("bool")
+            pes_header_data_length = data.read("uint:8")
+
+            if pts_dts_flags & 2:
+                bits = data.read("uint:4")
+                if bits != pts_dts_flags:
+                    raise Exception("2 bits before PTS should be 0x{:02X} "
+                        "but saw 0x{:02X}".format(pts_dts_flags, bits))
+                self.pts = data.read("uint:3")
+                if not data.read("bool"):
+                    raise Exception("First marker bit in PTS section of PES "
+                        "header is not 1.")
+                self.pts = (self.pts << 15) + data.read("uint:15")
+                if not data.read("bool"):
+                    raise Exception("Second marker bit in PTS section of PES "
+                        "header is not 1.")
+                self.pts = (self.pts << 15) + data.read("uint:15")
+                if not data.read("bool"):
+                    raise Exception("Third marker bit in PTS section of PES "
+                        "header is not 1.")
+
+            if pts_dts_flags & 1:
+                bits = data.read("uint:4")
+                if bits != 0x1:
+                    raise Exception("2 bits before DTS should be 0x1 "
+                        "but saw 0x{:02X}".format(bits))
+                self.dts = data.read("uint:3")
+                if not data.read("bool"):
+                    raise Exception("First marker bit in DTS section of PES "
+                        "header is not 1.")
+                self.dts = (self.dts << 15) + data.read("uint:15")
+                if not data.read("bool"):
+                    raise Exception("Second marker bit in DTS section of PES "
+                        "header is not 1.")
+                self.dts = (self.dts << 15) + data.read("uint:15")
+                if not data.read("bool"):
+                    raise Exception("Third marker bit in DTS section of PES "
+                        "header is not 1.")
+
+    def __repr__(self):
+        d = self.__dict__.copy()
+        del d["ts_packets"]
+        return json.dumps(d, default=to_json)
