@@ -76,7 +76,7 @@ def index_media_segment(media_file_name, template, force, verbose):
     if verbose:
         print("Writing single segment index to", output_file_name)
     if not force and os.path.exists(output_file_name):
-        choice = input("Output file {} already exists. Overwrite it? y/N" \
+        choice = input("Output file {} already exists. Overwrite it? [y/N] " \
             .format(output_file_name)).lower()
         if choice != 'y':
             return

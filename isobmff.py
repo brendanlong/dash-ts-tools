@@ -6,10 +6,10 @@ import struct
 
 
 class Box(object):
-    def __init__(self, type):
-        if isinstance(type, str):
-            type = type.encode("ASCII")
-        self.type = type
+    def __init__(self, box_type):
+        if isinstance(box_type, str):
+            box_type = box_type.encode("ASCII")
+        self.type = box_type
 
     @property
     def size(self):
@@ -53,8 +53,8 @@ class StypBox(Box):
 
 
 class FullBox(Box):
-    def __init__(self, type, version, flags):
-        super().__init__(type)
+    def __init__(self, box_type, version, flags):
+        super().__init__(box_type)
 
         self.version = version
         self.flags = flags
@@ -67,7 +67,6 @@ class FullBox(Box):
     def bytes(self):
         return Box.bytes.fget(self) + struct.pack("!BBH",
             self.version, self.flags >> 16, self.flags & 0xFF)
-        return binary
 
 
 class SidxReference(object):

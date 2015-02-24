@@ -141,7 +141,7 @@ class ProgramAssociationTable(object):
 
         num_programs = (section_length - 9) // 4
         self.programs = {}
-        for i in range(num_programs):
+        for _ in range(num_programs):
             program_number = data.read("uint:16")
             data.read(3) # reserved
             pid = data.read("uint:13")
@@ -151,8 +151,8 @@ class ProgramAssociationTable(object):
         while data.bytepos < len(data.bytes):
             padding_byte = data.read("uint:8")
             if padding_byte != 0xFF:
-                raise Exception("Padding byte at end of PAT was 0x{:X} but should "
-                    "be 0xFF".format(padding_byte))
+                raise Exception("Padding byte at end of PAT was 0x{:X} but "
+                    "should be 0xFF".format(padding_byte))
 
     def __repr__(self):
         return json.dumps(self, default=to_json)
@@ -238,8 +238,8 @@ class ProgramMapTable(object):
         while data.bytepos < len(data.bytes):
             padding_byte = data.read("uint:8")
             if padding_byte != 0xFF:
-                raise Exception("Padding byte at end of PAT was 0x{:02X} but should "
-                    "be 0xFF".format(padding_byte))
+                raise Exception("Padding byte at end of PAT was 0x{:02X} but "
+                    "should be 0xFF".format(padding_byte))
 
     def __repr__(self):
         return json.dumps(self, default=to_json)
@@ -293,15 +293,15 @@ class StreamID(object):
     H222_1_TYPE_E = 0xF8
 
     @staticmethod
-    def has_pes_header(id):
-        return id != StreamID.PROGRAM_STREAM_MAP \
-            and id != StreamID.PADDING \
-            and id != StreamID.PRIVATE_2 \
-            and id != StreamID.ECM \
-            and id != StreamID.EMM \
-            and id != StreamID.PROGRAM_STREAM_DIRECTORY \
-            and id != StreamID.DSMCC \
-            and id != StreamID.H222_1_TYPE_E
+    def has_pes_header(sid):
+        return sid != StreamID.PROGRAM_STREAM_MAP \
+            and sid != StreamID.PADDING \
+            and sid != StreamID.PRIVATE_2 \
+            and sid != StreamID.ECM \
+            and sid != StreamID.EMM \
+            and sid != StreamID.PROGRAM_STREAM_DIRECTORY \
+            and sid != StreamID.DSMCC \
+            and sid != StreamID.H222_1_TYPE_E
 
 
 class PESPacket(object):

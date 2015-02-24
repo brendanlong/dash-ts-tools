@@ -4,7 +4,7 @@ def to_json(o):
     if isinstance(o, bytes):
         try:
             return o.decode("ASCII")
-        except:
+        except UnicodeError:
             return b64encode(o)
     if isinstance(o, set):
         return list(o)
