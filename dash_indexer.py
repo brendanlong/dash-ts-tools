@@ -7,11 +7,11 @@ from ts import *
 from isobmff import *
 
 
-def get_offsets(media_file_name):
+def get_offsets(segment_file_name):
     offsets = defaultdict(list)
     last_pes = {}
     pes_packet = None
-    for pes_packet in read_pes(media_file_name):
+    for pes_packet in read_pes(segment_file_name):
         last_pes[pes_packet.pid] = pes_packet
         if pes_packet.random_access:
             logging.debug(
@@ -26,12 +26,10 @@ def get_offsets(media_file_name):
     return offsets
 
 
-def index_media_segment(media_file_name, template, force):
-    offsets = get_offsets(media_file_name)
+def get_segment_indexes(segment_file_name):
+    offsets = get_offsets(segment_file_name)
 
-    boxes = [StypBox("sisx")]
-    """:type : list[Box]"""
-
+    boxes = []
     for pid, offsets in offsets.items():
         sidx = SidxBox()
         sidx.reference_id = pid
@@ -48,12 +46,18 @@ def index_media_segment(media_file_name, template, force):
             previous_start_byte = byte_offset
             previous_start_time = time_offset
         boxes.append(sidx)
+    return boxes
+
+
+def index_media_segment(segment_file_name, template, force):
+    boxes = get_segment_indexes(segment_file_name)
+    boxes.insert(0, StypBox("sisx"))
 
     logging.debug("Boxes to write are:")
     for box in boxes:
         logging.debug(box)
 
-    segment_prefix, _ = os.path.splitext(media_file_name)
+    segment_prefix, _ = os.path.splitext(segment_file_name)
     output_file_name = template.format_map({"s": segment_prefix})
     logging.debug("Writing single segment index to %s", output_file_name)
     if not force and os.path.exists(output_file_name):
