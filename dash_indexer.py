@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import argparse
+import os
 
 from collections import defaultdict
-import os
+from enum import Enum
 from ts import *
 from isobmff import *
 
@@ -27,6 +28,7 @@ def get_offsets(segment_file_name):
 
 
 def get_segment_indexes(segment_file_name):
+    logging.info("Generating segment index for %s", segment_file_name)
     offsets = get_offsets(segment_file_name)
 
     boxes = []
@@ -49,28 +51,77 @@ def get_segment_indexes(segment_file_name):
     return boxes
 
 
-def index_media_segment(segment_file_name, template, force):
-    boxes = get_segment_indexes(segment_file_name)
-    boxes.insert(0, StypBox("sisx"))
+class IndexType(Enum):
+    SINGLE_SEGMENT_INDEX = 1
+    REPRESENTATION_INDEX = 2
+
+    @staticmethod
+    def from_string(s):
+        return {
+            "single": IndexType.SINGLE_SEGMENT_INDEX,
+            "representation": IndexType.REPRESENTATION_INDEX
+        }[s]
+
+
+def write_boxes(segment_file_name, name_part, template, boxes, force):
+        path, file_name = os.path.split(segment_file_name)
+        if name_part is None:
+            name_part, _ = os.path.splitext(file_name)
+        output_file_name = template.format_map(
+            {"path": path, "name_part": name_part})
+        logging.info("Writing index to %s", output_file_name)
+
+        if not force and os.path.exists(output_file_name):
+            choice = input(
+                "Output file {} already exists. Overwrite it? "
+                "[y/N] ".format(
+                    output_file_name)).lower()
+            if choice != 'y':
+                return
+        with open(output_file_name, "wb") as f:
+            for box in boxes:
+                f.write(box.bytes)
+
+
+def index_media_segments(segment_file_names, template, index_type, force):
+    indexes = {file_name: get_segment_indexes(file_name)
+               for file_name in segment_file_names}
 
     logging.debug("Boxes to write are:")
-    for box in boxes:
-        logging.debug(box)
-
-    path, file_name = os.path.split(segment_file_name)
-    file_name, _ = os.path.splitext(file_name)
-    output_file_name = template.format_map(
-        {"path": path, "file_name": file_name})
-    logging.info("Writing single segment index to %s", output_file_name)
-    if not force and os.path.exists(output_file_name):
-        choice = input(
-            "Output file {} already exists. Overwrite it? [y/N] ".format(
-                output_file_name)).lower()
-        if choice != 'y':
-            return
-    with open(output_file_name, "wb") as f:
+    for file_name, boxes in indexes.items():
+        logging.debug(file_name)
         for box in boxes:
-            f.write(box.bytes)
+            logging.debug(box)
+        logging.debug("")
+
+    in_order = list(indexes.items())
+    in_order.sort(key=lambda x: x[1][0].earliest_presentation_time)
+    if index_type == IndexType.SINGLE_SEGMENT_INDEX:
+        for file_name, boxes in in_order:
+            boxes.insert(0, StypBox("sisx"))
+            write_boxes(file_name, None, template, boxes, force)
+    else:
+        # TODO: This code won't work if there's more than one PID to index
+        index_sidx = SidxBox()
+        first_sidx = in_order[0][1][0]
+        index_sidx.reference_id = first_sidx.reference_id
+        index_sidx.earliest_presentation_time = \
+            first_sidx.earliest_presentation_time
+        index_sidx.first_offset = 0
+
+        boxes = [StypBox("risx"), index_sidx]
+
+        for _, segment_boxes in in_order:
+            sidx = segment_boxes[0]
+            reference = SidxReference(SidxReference.ReferenceType.INDEX)
+            reference.subsegment_duration = sidx.duration
+            reference.referenced_size = sidx.size
+            index_sidx.references.append(reference)
+
+        for _, segment_boxes in in_order:
+            boxes.extend(segment_boxes)
+        write_boxes(
+            segment_file_names[0], "representation", template, boxes, force)
 
 
 if __name__ == "__main__":
@@ -79,11 +130,17 @@ if __name__ == "__main__":
         "media_segment", help="The media segment to index.", nargs="*")
     parser.add_argument(
         "--template", "-t", help="Template for segment index files. "
-                                 "{file_name} will be replaced with the file "
+                                 "{name_part} will be replaced with the file "
                                  "name of the media segment minus the suffix "
                                  "(.ts). {path} will be replaced with the "
-                                 "full path to the media segment.",
-        default="{path}/{file_name}.sidx")
+                                 "full path to the media segment. For "
+                                 "representation index, {name_part} will be "
+                                 "'representation' and {path} will come from "
+                                 "the first listed segment.",
+        default="{path}/{name_part}.sidx")
+    parser.add_argument(
+        "--index-type", "-i", type=IndexType.from_string,
+        default=IndexType.SINGLE_SEGMENT_INDEX, help="The type of ")
     parser.add_argument(
         "--force", "-f", action="store_true", default=False,
         help="Overwrite output files without prompting.")
@@ -95,5 +152,5 @@ if __name__ == "__main__":
     logging.basicConfig(
         format='%(levelname)s: %(message)s',
         level=logging.DEBUG if args.verbose else logging.INFO)
-    for media_segment in args.media_segment:
-        index_media_segment(media_segment, args.template, args.force)
+    index_media_segments(
+        args.media_segment, args.template, args.index_type, args.force)

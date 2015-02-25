@@ -1,5 +1,6 @@
 import bitstring
 from common import to_json
+from enum import IntEnum
 import struct
 
 
@@ -68,7 +69,7 @@ class FullBox(Box):
 
 
 class SidxReference(object):
-    class ReferenceType:
+    class ReferenceType(IntEnum):
         MEDIA = 0
         INDEX = 1
 
@@ -76,7 +77,7 @@ class SidxReference(object):
         self.reference_type = reference_type
         self.referenced_size = 0
         self.subsegment_duration = 0
-        self.starts_with_sap = 0
+        self.starts_with_sap = False
         self.sap_type = 0
         self.sap_delta_time = 0
 
@@ -88,7 +89,8 @@ class SidxReference(object):
     def bytes(self):
         return bitstring.pack(
             "bool, uint:31, uint:32, bool, uint:3, uint:28",
-            self.reference_type, self.referenced_size, self.subsegment_duration,
+            self.reference_type, self.referenced_size,
+            self.subsegment_duration,
             self.starts_with_sap, self.sap_type, self.sap_delta_time).bytes
 
 
@@ -103,7 +105,7 @@ class SidxBox(FullBox):
         self.references = []
 
     @property
-    def size(self):
+    def size(self) -> int:
         total = super().size + 12
         if self.version == 0:
             total += 8
@@ -114,7 +116,7 @@ class SidxBox(FullBox):
         return total
 
     @property
-    def bytes(self):
+    def bytes(self) -> int:
         binary = super().bytes + struct.pack(
             "!II", self.reference_id, self.timescale)
         if self.version == 0:
@@ -127,3 +129,7 @@ class SidxBox(FullBox):
         for reference in self.references:
             binary += reference.bytes
         return binary
+
+    @property
+    def duration(self) -> int:
+        return sum((r.subsegment_duration for r in self.references))
