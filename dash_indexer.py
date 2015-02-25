@@ -68,7 +68,7 @@ def index_media_segment(media_file_name, template, force):
 
     segment_prefix, _ = os.path.splitext(media_file_name)
     output_file_name = template.format_map({"s": segment_prefix})
-    logging.debug("Writing single segment index to", output_file_name)
+    logging.debug("Writing single segment index to %s", output_file_name)
     if not force and os.path.exists(output_file_name):
         choice = input("Output file {} already exists. Overwrite it? [y/N] " \
             .format(output_file_name)).lower()
