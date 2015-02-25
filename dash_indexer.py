@@ -2,12 +2,13 @@
 import argparse
 from collections import defaultdict
 from itertools import count
+import logging
 import os
 from ts import PESReader, ProgramAssociationTable, ProgramMapTable, TSPacket
 from isobmff import SidxBox, SidxReference, StypBox
 
 
-def get_offsets(media_file_name, verbose):
+def get_offsets(media_file_name):
     byte_offsets = defaultdict(list)
     with open(media_file_name, "rb") as f:
         pmt_pid = None
@@ -35,7 +36,7 @@ def get_offsets(media_file_name, verbose):
                 pmt = ProgramMapTable(ts_packet.payload)
                 for pid in pmt.streams:
                     if pid not in pes_readers:
-                        pes_readers[pid] = PESReader(verbose)
+                        pes_readers[pid] = PESReader()
 
             elif ts_packet.pid in pes_readers:
                 pes_packet = pes_readers[ts_packet.pid].add_ts_packet(ts_packet)
@@ -43,18 +44,15 @@ def get_offsets(media_file_name, verbose):
                     pass
 
                 if ts_packet.random_access_indicator:
-                    if verbose:
-                        print("Found TS packet with random_access_indicator = "
-                            "1 at byte offset", byte_offset, "for PID",
-                            ts_packet.pid)
+                    logging.debug("Found TS packet with "
+                        "random_access_indicator = 1 at byte offset %s for "
+                        "PID %s", byte_offset, ts_packet.pid)
                     byte_offsets[ts_packet.pid].append(byte_offset)
     return byte_offsets
 
 
-def index_media_segment(media_file_name, template, force, verbose):
-    if verbose:
-        print("Reading media file", media_file_name)
-    byte_offsets = get_offsets(media_file_name, verbose)
+def index_media_segment(media_file_name, template, force):
+    byte_offsets = get_offsets(media_file_name)
 
     boxes = [StypBox("sisx")]
 
@@ -70,15 +68,13 @@ def index_media_segment(media_file_name, template, force, verbose):
             previous_start = byte_offset
         boxes.append(sidx)
 
-    if verbose:
-        print("Boxes to write are:")
-        for box in boxes:
-            print(box)
+    logging.debug("Boxes to write are:")
+    for box in boxes:
+        logging.debug(box)
 
     segment_prefix, _ = os.path.splitext(media_file_name)
     output_file_name = template.format_map({"s": segment_prefix})
-    if verbose:
-        print("Writing single segment index to", output_file_name)
+    logging.debug("Writing single segment index to", output_file_name)
     if not force and os.path.exists(output_file_name):
         choice = input("Output file {} already exists. Overwrite it? [y/N] " \
             .format(output_file_name)).lower()
@@ -102,5 +98,6 @@ if __name__ == "__main__":
         help="Enable verbose output.")
 
     args = parser.parse_args()
-    index_media_segment(args.media_segment, args.template, args.force,
-        args.verbose)
+    logging.basicConfig(format='%(levelname)s: %(message)s',
+        level=logging.DEBUG if args.verbose else logging.INFO)
+    index_media_segment(args.media_segment, args.template, args.force)

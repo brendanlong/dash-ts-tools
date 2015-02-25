@@ -2,6 +2,7 @@ from bitstring import BitStream
 from collections import defaultdict
 from common import to_json
 import json
+import logging
 import struct
 
 
@@ -246,18 +247,16 @@ class ProgramMapTable(object):
 
 
 class PESReader(object):
-    def __init__(self, verbose):
-        self.verbose = verbose
+    def __init__(self):
         self.ts_packets = []
         self.length = None
         self.data = []
 
     def add_ts_packet(self, ts_packet):
         if not self.ts_packets and not ts_packet.payload_unit_start_indicator:
-            if self.verbose:
-                print("Warning: First TS packet for PID 0x{:02X} does not have "
-                    "payload_unit_start_indicator = 1. Ignoring this "
-                    "packet.".format(ts_packet.pid))
+            logging.debug("First TS packet for PID 0x{:02X} does not "
+                "have payload_unit_start_indicator = 1. Ignoring this "
+                "packet.".format(ts_packet.pid))
             return None
 
         self.ts_packets.append(ts_packet)
@@ -273,7 +272,7 @@ class PESReader(object):
         try:
             pes_packet = PESPacket(bytes(self.data), self.ts_packets)
         except Exception as e:
-            print("Warning:", e)
+            logging.warning(e)
             pes_packet = None
 
         self.ts_packets = []
