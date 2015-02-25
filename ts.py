@@ -50,72 +50,74 @@ class TSPacket(object):
         self.piecewise_rate = None
         self.splice_type = None
         self.dts_next_au = None
+        self.discontinuity_indicator = None
+        self.random_access_indicator = None
+        self.elementary_stream_priority_indicator = None
         if has_adaptation_field:
             adaptation_field_length = data.read("uint:8")
-            self.discontinuity_indicator = data.read("bool")
-            self.random_access_indicator = data.read("bool")
-            self.elementary_stream_priority_indicator = data.read("bool")
-            pcr_flag = data.read("bool")
-            opcr_flag = data.read("bool")
-            splicing_point_flag = data.read("bool")
-            transport_private_data_flag = data.read("bool")
-            adaptation_field_extension_flag = data.read("bool")
+            if adaptation_field_length:
+                self.discontinuity_indicator = data.read("bool")
+                self.random_access_indicator = data.read("bool")
+                self.elementary_stream_priority_indicator = data.read("bool")
+                pcr_flag = data.read("bool")
+                opcr_flag = data.read("bool")
+                splicing_point_flag = data.read("bool")
+                transport_private_data_flag = data.read("bool")
+                adaptation_field_extension_flag = data.read("bool")
 
-            if pcr_flag:
-                self.program_clock_reference_base = data.read("uint:33")
-                data.read(6) # reserved
-                self.program_clock_reference_extension = data.read("uint:9")
+                if pcr_flag:
+                    self.program_clock_reference_base = data.read("uint:33")
+                    data.read(6) # reserved
+                    self.program_clock_reference_extension = data.read("uint:9")
 
-            if opcr_flag:
-                self.original_program_clock_reference_base = data.read(
-                    "uint:33")
-                data.read(6) # reserved
-                self.original_program_clock_reference_extension = data.read(
-                    "uint:9")
+                if opcr_flag:
+                    self.original_program_clock_reference_base = data.read(
+                        "uint:33")
+                    data.read(6) # reserved
+                    self.original_program_clock_reference_extension = data.read(
+                        "uint:9")
 
-            if splicing_point_flag:
-                self.splice_countdown = data.read("uint:8")
+                if splicing_point_flag:
+                    self.splice_countdown = data.read("uint:8")
 
-            if transport_private_data_flag:
-                transport_private_data_length = data.read("uint:8")
-                self.private_data = data.read(transport_private_data_length \
-                    * 8).bytes
+                if transport_private_data_flag:
+                    transport_private_data_length = data.read("uint:8")
+                    self.private_data = data.read(transport_private_data_length \
+                        * 8).bytes
 
-            if adaptation_field_extension_flag:
-                adaptation_field_extension_length = data.read("uint:8")
-                ltw_flag = data.read("bool")
-                piecewise_rate_flag = data.read("bool")
-                seamless_splice_flag = data.read("bool")
-                data.read(5) # reserved
+                if adaptation_field_extension_flag:
+                    adaptation_field_extension_length = data.read("uint:8")
+                    ltw_flag = data.read("bool")
+                    piecewise_rate_flag = data.read("bool")
+                    seamless_splice_flag = data.read("bool")
+                    data.read(5) # reserved
 
-                if ltw_flag:
-                    self.ltw_valid_flag = data.read("bool")
-                    self.ltw_offset = data.read("uint:15")
+                    if ltw_flag:
+                        self.ltw_valid_flag = data.read("bool")
+                        self.ltw_offset = data.read("uint:15")
 
-                if piecewise_rate_flag:
-                    data.read(2) # reserved
-                    self.piecewise_rate = data.read("uint:22")
+                    if piecewise_rate_flag:
+                        data.read(2) # reserved
+                        self.piecewise_rate = data.read("uint:22")
 
-                if seamless_splice_flag:
-                    self.splice_type = data.read("uint:4")
-                    self.dts_next_au = data.read("uint:3")
-                    if not data.read("bool"):
-                        raise Exception("First marker bit in seamless splice "
-                            "section of header is not 1.")
-                    self.ts_next_au = (self.ts_next_au << 15) \
-                        + data.read("uint:15")
-                    if not data.read("bool"):
-                        raise Exception("Second marker bit in seamless splice "
-                            "section of header is not 1.")
-                    self.ts_next_au = (self.ts_next_au << 15) \
-                        + data.read("uint:15")
-                    if not data.read("bool"):
-                        raise Exception("Third marker bit in seamless splice "
-                            "section of header is not 1.")
-        else:
-            self.discontinuity_indicator = None
-            self.random_access_indicator = None
-            self.elementary_stream_priority_indicator = None
+                    if seamless_splice_flag:
+                        self.splice_type = data.read("uint:4")
+                        self.dts_next_au = data.read("uint:3")
+                        if not data.read("bool"):
+                            raise Exception("First marker bit in seamless splice "
+                                "section of header is not 1.")
+                        self.ts_next_au = (self.ts_next_au << 15) \
+                            + data.read("uint:15")
+                        if not data.read("bool"):
+                            raise Exception("Second marker bit in seamless splice "
+                                "section of header is not 1.")
+                        self.ts_next_au = (self.ts_next_au << 15) \
+                            + data.read("uint:15")
+                        if not data.read("bool"):
+                            raise Exception("Third marker bit in seamless splice "
+                                "section of header is not 1.")
+
+                data.read(((adaptation_field_length + 5) - data.bytepos) * 8)
 
         if has_payload:
             self.payload = data.read("bytes")
