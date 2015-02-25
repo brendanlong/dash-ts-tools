@@ -57,9 +57,11 @@ def index_media_segment(segment_file_name, template, force):
     for box in boxes:
         logging.debug(box)
 
-    segment_prefix, _ = os.path.splitext(segment_file_name)
-    output_file_name = template.format_map({"s": segment_prefix})
-    logging.debug("Writing single segment index to %s", output_file_name)
+    path, file_name = os.path.split(segment_file_name)
+    file_name, _ = os.path.splitext(file_name)
+    output_file_name = template.format_map(
+        {"path": path, "file_name": file_name})
+    logging.info("Writing single segment index to %s", output_file_name)
     if not force and os.path.exists(output_file_name):
         choice = input(
             "Output file {} already exists. Overwrite it? [y/N] ".format(
@@ -73,12 +75,15 @@ def index_media_segment(segment_file_name, template, force):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("media_segment", help="The media segment to index.")
     parser.add_argument(
-        "--template", "-t", help="Template for segment index files. {s} will "
-                                 "be replaced with the name of the media "
-                                 "segment minus the suffix (.ts).",
-        default="{s}.sidx")
+        "media_segment", help="The media segment to index.", nargs="*")
+    parser.add_argument(
+        "--template", "-t", help="Template for segment index files. "
+                                 "{file_name} will be replaced with the file "
+                                 "name of the media segment minus the suffix "
+                                 "(.ts). {path} will be replaced with the "
+                                 "full path to the media segment.",
+        default="{path}/{file_name}.sidx")
     parser.add_argument(
         "--force", "-f", action="store_true", default=False,
         help="Overwrite output files without prompting.")
@@ -90,4 +95,5 @@ if __name__ == "__main__":
     logging.basicConfig(
         format='%(levelname)s: %(message)s',
         level=logging.DEBUG if args.verbose else logging.INFO)
-    index_media_segment(args.media_segment, args.template, args.force)
+    for media_segment in args.media_segment:
+        index_media_segment(media_segment, args.template, args.force)
