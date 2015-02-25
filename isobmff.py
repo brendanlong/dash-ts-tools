@@ -1,7 +1,6 @@
 import bitstring
 from bitstring import BitStream
 from common import to_json
-import json
 import struct
 
 
@@ -20,7 +19,7 @@ class Box(object):
         return struct.pack("!I4s", self.size, self.type)
 
     def __repr__(self):
-        return json.dumps(self, default=to_json)
+        return to_json(self)
 
 
 class StypBox(Box):

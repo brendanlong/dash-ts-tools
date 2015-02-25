@@ -2,7 +2,6 @@ from bitstring import BitStream
 from collections import defaultdict
 from common import to_json
 from itertools import count
-import json
 import logging
 import struct
 
@@ -124,7 +123,7 @@ class TSPacket(object):
             self.payload = None
 
     def __repr__(self):
-        return json.dumps(self, default=to_json)
+        return to_json(self)
 
 
 class ProgramAssociationTable(object):
@@ -168,7 +167,7 @@ class ProgramAssociationTable(object):
                     "should be 0xFF".format(padding_byte))
 
     def __repr__(self):
-        return json.dumps(self, default=to_json)
+        return to_json(self)
 
 
 class Descriptor(object):
@@ -182,7 +181,7 @@ class Descriptor(object):
         return 2 + len(self.contents)
 
     def __repr__(self):
-        return json.dumps(self, default=to_json)
+        return to_json(self)
 
     @staticmethod
     def read_descriptors(data, size):
@@ -255,7 +254,7 @@ class ProgramMapTable(object):
                     "should be 0xFF".format(padding_byte))
 
     def __repr__(self):
-        return json.dumps(self, default=to_json)
+        return to_json(self)
 
 
 class PESReader(object):
@@ -387,4 +386,4 @@ class PESPacket(object):
     def __repr__(self):
         d = self.__dict__.copy()
         del d["ts_packets"]
-        return json.dumps(d, default=to_json)
+        return to_json(d)

@@ -1,6 +1,7 @@
 from base64 import b64encode
+import json
 
-def to_json(o):
+def _to_json_dict(o):
     if isinstance(o, bytes):
         try:
             return o.decode("ASCII")
@@ -9,3 +10,6 @@ def to_json(o):
     if isinstance(o, set):
         return list(o)
     return o.__dict__
+
+def to_json(o):
+    return json.dumps(o, default=_to_json_dict, indent=4, sort_keys=True)
