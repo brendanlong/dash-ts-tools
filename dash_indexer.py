@@ -14,9 +14,9 @@ def get_offsets(media_file_name):
     for pes_packet in read_pes(media_file_name):
         last_pes[pes_packet.pid] = pes_packet
         if pes_packet.random_access:
-            logging.debug("Found TS packet with "
-                          "random_access_indicator = 1 at byte offset %s for "
-                          "PID %s", pes_packet.byte_offset, pes_packet.pid)
+            logging.debug(
+                "Found TS packet with random_access_indicator = 1 at byte "
+                "offset %s for PID %s", pes_packet.byte_offset, pes_packet.pid)
             offset = pes_packet.byte_offset, pes_packet.pts
             offsets[pes_packet.pid].append(offset)
 
@@ -30,6 +30,7 @@ def index_media_segment(media_file_name, template, force):
     offsets = get_offsets(media_file_name)
 
     boxes = [StypBox("sisx")]
+    """:type : list[Box]"""
 
     for pid, offsets in offsets.items():
         sidx = SidxBox()
