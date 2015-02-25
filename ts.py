@@ -1,16 +1,28 @@
 from bitstring import BitStream
 from collections import defaultdict
 from common import to_json
+from itertools import count
 import json
 import logging
 import struct
+
+
+def read_ts(file_name):
+    with open(file_name, "rb") as f:
+        for byte_offset in count(step=TSPacket.SIZE):
+            ts_data = f.read(TSPacket.SIZE)
+            if not ts_data:
+                break
+            yield TSPacket(ts_data, byte_offset)
 
 
 class TSPacket(object):
     SYNC_BYTE = 0x47
     SIZE = 188
 
-    def __init__(self, data):
+    def __init__(self, data, byte_offset):
+        self.byte_offset = byte_offset
+
         data = BitStream(data)
         sync_byte = data.read("uint:8")
         if sync_byte != TSPacket.SYNC_BYTE:
