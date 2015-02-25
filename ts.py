@@ -1,8 +1,8 @@
-from bitstring import BitStream
-from collections import defaultdict
-from common import to_json
 from itertools import count
 import logging
+
+from bitstring import BitStream
+from common import to_json
 import struct
 
 
@@ -24,10 +24,10 @@ def read_pes(file_name):
             programs = list(pat.programs.values())
             if len(programs) != 1:
                 raise Exception("PAT has {} programs, but DASH only "
-                    "allows 1 program.".format(len(pat.programs)))
+                                "allows 1 program.".format(len(pat.programs)))
             if pmt_pid is not None and programs[0] != pmt_pid:
                 raise Exception("PAT has new PMT PID. This program has "
-                    "not been tested to handled this case.")
+                                "not been tested to handled this case.")
             pmt_pid = programs[0]
 
         elif ts_packet.pid == pmt_pid:
@@ -94,13 +94,13 @@ class TSPacket(object):
 
                 if pcr_flag:
                     self.program_clock_reference_base = data.read("uint:33")
-                    data.read(6) # reserved
+                    data.read(6)  # reserved
                     self.program_clock_reference_extension = data.read("uint:9")
 
                 if opcr_flag:
                     self.original_program_clock_reference_base = data.read(
                         "uint:33")
-                    data.read(6) # reserved
+                    data.read(6)  # reserved
                     self.original_program_clock_reference_extension = data.read(
                         "uint:9")
 
@@ -109,39 +109,42 @@ class TSPacket(object):
 
                 if transport_private_data_flag:
                     transport_private_data_length = data.read("uint:8")
-                    self.private_data = data.read(transport_private_data_length \
-                        * 8).bytes
+                    self.private_data = data.read(
+                        transport_private_data_length * 8).bytes
 
                 if adaptation_field_extension_flag:
                     adaptation_field_extension_length = data.read("uint:8")
                     ltw_flag = data.read("bool")
                     piecewise_rate_flag = data.read("bool")
                     seamless_splice_flag = data.read("bool")
-                    data.read(5) # reserved
+                    data.read(5)  # reserved
 
                     if ltw_flag:
                         self.ltw_valid_flag = data.read("bool")
                         self.ltw_offset = data.read("uint:15")
 
                     if piecewise_rate_flag:
-                        data.read(2) # reserved
+                        data.read(2)  # reserved
                         self.piecewise_rate = data.read("uint:22")
 
                     if seamless_splice_flag:
                         self.splice_type = data.read("uint:4")
                         self.dts_next_au = data.read("uint:3")
                         if not data.read("bool"):
-                            raise Exception("First marker bit in seamless splice "
+                            raise Exception(
+                                "First marker bit in seamless splice "
                                 "section of header is not 1.")
-                        self.ts_next_au = (self.ts_next_au << 15) \
-                            + data.read("uint:15")
+                        self.ts_next_au = (self.ts_next_au << 15) + data.read(
+                            "uint:15")
                         if not data.read("bool"):
-                            raise Exception("Second marker bit in seamless splice "
+                            raise Exception(
+                                "Second marker bit in seamless splice "
                                 "section of header is not 1.")
-                        self.ts_next_au = (self.ts_next_au << 15) \
-                            + data.read("uint:15")
+                        self.ts_next_au = (self.ts_next_au << 15) + data.read(
+                            "uint:15")
                         if not data.read("bool"):
-                            raise Exception("Third marker bit in seamless splice "
+                            raise Exception(
+                                "Third marker bit in seamless splice "
                                 "section of header is not 1.")
 
                 data.read(((adaptation_field_length + 5) - data.bytepos) * 8)
@@ -167,14 +170,15 @@ class ProgramAssociationTable(object):
 
         self.table_id = data.read("uint:8")
         if self.table_id != self.TABLE_ID:
-            raise Exception("table_id for PAT is {} but should be {}".format(
-                self.table_id, self.TABLE_ID))
+            raise Exception(
+                "table_id for PAT is {} but should be {}".format(
+                    self.table_id, self.TABLE_ID))
         self.section_syntax_indicator = data.read("bool")
         self.private_indicator = data.read("bool")
-        data.read(2) # reserved
+        data.read(2)  # reserved
         section_length = data.read("uint:12")
         self.transport_stream_id = data.read("uint:16")
-        data.read(2) # reserved
+        data.read(2)  # reserved
         self.version_number = data.read("uint:5")
         self.current_next_indicator = data.read("bool")
         self.section_number = data.read("uint:8")
@@ -184,7 +188,7 @@ class ProgramAssociationTable(object):
         self.programs = {}
         for _ in range(num_programs):
             program_number = data.read("uint:16")
-            data.read(3) # reserved
+            data.read(3)  # reserved
             pid = data.read("uint:13")
             self.programs[program_number] = pid
         self.crc = data.read("uint:32")
@@ -193,7 +197,7 @@ class ProgramAssociationTable(object):
             padding_byte = data.read("uint:8")
             if padding_byte != 0xFF:
                 raise Exception("Padding byte at end of PAT was 0x{:X} but "
-                    "should be 0xFF".format(padding_byte))
+                                "should be 0xFF".format(padding_byte))
 
     def __repr__(self):
         return to_json(self)
@@ -222,16 +226,16 @@ class Descriptor(object):
             total += descriptor.size
         if total != size:
             raise Exception("Excepted {} byts of descriptors, but got "
-                "{} bytes of descriptors.".format(size, total))
+                            "{} bytes of descriptors.".format(size, total))
         return descriptors
 
 
 class Stream(object):
     def __init__(self, data):
         self.stream_type = data.read("uint:8")
-        data.read(3) # reserved
+        data.read(3)  # reserved
         self.elementary_pid = data.read("uint:13")
-        data.read(4) # reserved
+        data.read(4)  # reserved
         es_info_length = data.read("uint:12")
         self.descriptors = Descriptor.read_descriptors(data, es_info_length)
 
@@ -247,27 +251,28 @@ class ProgramMapTable(object):
 
         self.table_id = data.read("uint:8")
         if self.table_id != self.TABLE_ID:
-            raise Exception("table_id for PMT is {} but should be {}".format(
-                self.table_id, self.TABLE_ID))
+            raise Exception(
+                "table_id for PMT is {} but should be {}".format(
+                    self.table_id, self.TABLE_ID))
         self.section_syntax_indicator = data.read("bool")
         self.private_indicator = data.read("bool")
-        data.read(2) # reserved
+        data.read(2)  # reserved
         section_length = data.read("uint:12")
 
         self.program_number = data.read("uint:16")
-        data.read(2) # reserved
+        data.read(2)  # reserved
         self.version_number = data.read("uint:5")
         self.current_next_indicator = data.read("bool")
         self.section_number = data.read("uint:8")
         self.last_section_number = data.read("uint:8")
 
-        data.read(3) # reserved
+        data.read(3)  # reserved
         self.pcr_pid = data.read("uint:13")
 
-        data.read(4) # reserved
+        data.read(4)  # reserved
         program_info_length = data.read("uint:12")
-        self.descriptors = Descriptor.read_descriptors(data,
-            program_info_length)
+        self.descriptors = Descriptor.read_descriptors(
+            data, program_info_length)
 
         self.streams = {}
         while data.bytepos < section_length + 3 - 4:
@@ -280,7 +285,7 @@ class ProgramMapTable(object):
             padding_byte = data.read("uint:8")
             if padding_byte != 0xFF:
                 raise Exception("Padding byte at end of PAT was 0x{:02X} but "
-                    "should be 0xFF".format(padding_byte))
+                                "should be 0xFF".format(padding_byte))
 
     def __repr__(self):
         return to_json(self)
@@ -294,9 +299,9 @@ class PESReader(object):
 
     def add_ts_packet(self, ts_packet):
         if not self.ts_packets and not ts_packet.payload_unit_start_indicator:
-            logging.debug("First TS packet for PID 0x{:02X} does not "
-                "have payload_unit_start_indicator = 1. Ignoring this "
-                "packet.".format(ts_packet.pid))
+            logging.debug("First TS packet for PID 0x{:02X} does not have "
+                          "payload_unit_start_indicator = 1. Ignoring this "
+                          "packet.".format(ts_packet.pid))
             return None
 
         self.ts_packets.append(ts_packet)
@@ -357,7 +362,7 @@ class PESPacket(object):
         start_code = data.read("uint:24")
         if start_code != 0x000001:
             raise Exception("packet_start_code_prefix is 0x{:06X} but should "
-                "be 0x000001".format(start_code))
+                            "be 0x000001".format(start_code))
 
         self.stream_id = data.read("uint:8")
         pes_packet_length = data.read("uint:16")
@@ -366,7 +371,7 @@ class PESPacket(object):
             bits = data.read("uint:2")
             if bits != 2:
                 raise Exception("First 2 bits of a PES header should be 0x2 "
-                    "but saw 0x{:02X}'".format(bits))
+                                "but saw 0x{:02X}'".format(bits))
 
             self.pes_scrambling_control = data.read("uint:2")
             self.pes_priority = data.read("bool")
@@ -386,37 +391,38 @@ class PESPacket(object):
                 bits = data.read("uint:4")
                 if bits != pts_dts_flags:
                     raise Exception("2 bits before PTS should be 0x{:02X} "
-                        "but saw 0x{:02X}".format(pts_dts_flags, bits))
+                                    "but saw 0x{:02X}".format(pts_dts_flags,
+                        bits))
                 self.pts = data.read("uint:3")
                 if not data.read("bool"):
                     raise Exception("First marker bit in PTS section of PES "
-                        "header is not 1.")
+                                    "header is not 1.")
                 self.pts = (self.pts << 15) + data.read("uint:15")
                 if not data.read("bool"):
                     raise Exception("Second marker bit in PTS section of PES "
-                        "header is not 1.")
+                                    "header is not 1.")
                 self.pts = (self.pts << 15) + data.read("uint:15")
                 if not data.read("bool"):
                     raise Exception("Third marker bit in PTS section of PES "
-                        "header is not 1.")
+                                    "header is not 1.")
 
             if pts_dts_flags & 1:
                 bits = data.read("uint:4")
                 if bits != 0x1:
                     raise Exception("2 bits before DTS should be 0x1 "
-                        "but saw 0x{:02X}".format(bits))
+                                    "but saw 0x{:02X}".format(bits))
                 self.dts = data.read("uint:3")
                 if not data.read("bool"):
                     raise Exception("First marker bit in DTS section of PES "
-                        "header is not 1.")
+                                    "header is not 1.")
                 self.dts = (self.dts << 15) + data.read("uint:15")
                 if not data.read("bool"):
                     raise Exception("Second marker bit in DTS section of PES "
-                        "header is not 1.")
+                                    "header is not 1.")
                 self.dts = (self.dts << 15) + data.read("uint:15")
                 if not data.read("bool"):
                     raise Exception("Third marker bit in DTS section of PES "
-                        "header is not 1.")
+                                    "header is not 1.")
 
     def __repr__(self):
         d = self.__dict__.copy()

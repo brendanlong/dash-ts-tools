@@ -1,5 +1,4 @@
 import bitstring
-from bitstring import BitStream
 from common import to_json
 import struct
 
@@ -44,8 +43,8 @@ class StypBox(Box):
 
     @property
     def bytes(self):
-        binary = super().bytes + struct.pack("!4sI", self.major_brand,
-            self.minor_version)
+        binary = super().bytes + struct.pack(
+            "!4sI", self.major_brand, self.minor_version)
         for brand in self.compatible_brands:
             binary += struct.pack("!4s", brand)
         return binary
@@ -64,8 +63,8 @@ class FullBox(Box):
 
     @property
     def bytes(self):
-        return Box.bytes.fget(self) + struct.pack("!BBH",
-            self.version, self.flags >> 16, self.flags & 0xFF)
+        return Box.bytes.fget(self) + struct.pack(
+            "!BBH", self.version, self.flags >> 16, self.flags & 0xFF)
 
 
 class SidxReference(object):
@@ -87,7 +86,8 @@ class SidxReference(object):
 
     @property
     def bytes(self):
-        return bitstring.pack("bool, uint:31, uint:32, bool, uint:3, uint:28",
+        return bitstring.pack(
+            "bool, uint:31, uint:32, bool, uint:3, uint:28",
             self.reference_type, self.referenced_size, self.subsegment_duration,
             self.starts_with_sap, self.sap_type, self.sap_delta_time).bytes
 
@@ -115,14 +115,14 @@ class SidxBox(FullBox):
 
     @property
     def bytes(self):
-        binary = super().bytes + struct.pack("!II", self.reference_id,
-            self.timescale)
+        binary = super().bytes + struct.pack(
+            "!II", self.reference_id, self.timescale)
         if self.version == 0:
-            binary += struct.pack("!II", self.earliest_presentation_time,
-                self.first_offset)
+            binary += struct.pack(
+                "!II", self.earliest_presentation_time, self.first_offset)
         else:
-            binary += struct.pack("!QQ", self.earliest_presentation_time,
-                self.first_offset)
+            binary += struct.pack(
+                "!QQ", self.earliest_presentation_time, self.first_offset)
         binary += struct.pack("!HH", 0, len(self.references))
         for reference in self.references:
             binary += reference.bytes

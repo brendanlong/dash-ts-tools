@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+
 from collections import defaultdict
-import logging
 import os
 from ts import *
 from isobmff import *
@@ -15,8 +15,8 @@ def get_offsets(media_file_name):
         last_pes[pes_packet.pid] = pes_packet
         if pes_packet.random_access:
             logging.debug("Found TS packet with "
-                "random_access_indicator = 1 at byte offset %s for "
-                "PID %s", pes_packet.byte_offset, pes_packet.pid)
+                          "random_access_indicator = 1 at byte offset %s for "
+                          "PID %s", pes_packet.byte_offset, pes_packet.pid)
             offset = pes_packet.byte_offset, pes_packet.pts
             offsets[pes_packet.pid].append(offset)
 
@@ -54,8 +54,9 @@ def index_media_segment(media_file_name, template, force):
     output_file_name = template.format_map({"s": segment_prefix})
     logging.debug("Writing single segment index to %s", output_file_name)
     if not force and os.path.exists(output_file_name):
-        choice = input("Output file {} already exists. Overwrite it? [y/N] " \
-            .format(output_file_name)).lower()
+        choice = input(
+            "Output file {} already exists. Overwrite it? [y/N] ".format(
+                output_file_name)).lower()
         if choice != 'y':
             return
     with open(output_file_name, "wb") as f:
@@ -66,16 +67,20 @@ def index_media_segment(media_file_name, template, force):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("media_segment", help="The media segment to index.")
-    parser.add_argument("--template", "-t", help="Template for segment index "
-        "files. {s} will be replaced with the name of the media segment minus "
-        "the suffix (.ts).",
+    parser.add_argument(
+        "--template", "-t", help="Template for segment index files. {s} will "
+                                 "be replaced with the name of the media "
+                                 "segment minus the suffix (.ts).",
         default="{s}.sidx")
-    parser.add_argument("--force", "-f", action="store_true", default=False,
+    parser.add_argument(
+        "--force", "-f", action="store_true", default=False,
         help="Overwrite output files without prompting.")
-    parser.add_argument("--verbose", "-v", action="store_true", default=False,
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", default=False,
         help="Enable verbose output.")
 
     args = parser.parse_args()
-    logging.basicConfig(format='%(levelname)s: %(message)s',
+    logging.basicConfig(
+        format='%(levelname)s: %(message)s',
         level=logging.DEBUG if args.verbose else logging.INFO)
     index_media_segment(args.media_segment, args.template, args.force)
