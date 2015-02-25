@@ -8,35 +8,42 @@ from isobmff import *
 
 
 def get_offsets(media_file_name):
-    byte_offsets = defaultdict(list)
+    offsets = defaultdict(list)
+    last_pes = {}
+    pes_packet = None
     for pes_packet in read_pes(media_file_name):
+        last_pes[pes_packet.pid] = pes_packet
         if pes_packet.random_access:
             logging.debug("Found TS packet with "
                 "random_access_indicator = 1 at byte offset %s for "
                 "PID %s", pes_packet.byte_offset, pes_packet.pid)
-            byte_offsets[pes_packet.pid].append(pes_packet.byte_offset)
+            offset = pes_packet.byte_offset, pes_packet.pts
+            offsets[pes_packet.pid].append(offset)
 
-    for pid in byte_offsets:
-        byte_offsets[pid].append(pes_packet.byte_offset + pes_packet.size)
-    print(dict(byte_offsets))
-    return byte_offsets
+    for pid in offsets:
+        offset = pes_packet.byte_offset, last_pes[pid].pts
+        offsets[pid].append(offset)
+    return offsets
 
 
 def index_media_segment(media_file_name, template, force):
-    byte_offsets = get_offsets(media_file_name)
+    offsets = get_offsets(media_file_name)
 
     boxes = [StypBox("sisx")]
 
-    for pid, byte_offsets in byte_offsets.items():
+    for pid, offsets in offsets.items():
         sidx = SidxBox()
         sidx.reference_id = pid
-        sidx.first_offset = byte_offsets[0]
-        previous_start = sidx.first_offset
-        for byte_offset in byte_offsets[1:]:
+        sidx.first_offset, sidx.earliest_presentation_time = offsets[0]
+        previous_start_byte = sidx.first_offset
+        previous_start_time = sidx.earliest_presentation_time
+        for byte_offset, time_offset in offsets[1:]:
             reference = SidxReference(SidxReference.ReferenceType.MEDIA)
-            reference.referenced_size = byte_offset - previous_start
+            reference.referenced_size = byte_offset - previous_start_byte
+            reference.subsegment_duration = time_offset - previous_start_time
             sidx.references.append(reference)
-            previous_start = byte_offset
+            previous_start_byte = byte_offset
+            previous_start_time = time_offset
         boxes.append(sidx)
 
     logging.debug("Boxes to write are:")
