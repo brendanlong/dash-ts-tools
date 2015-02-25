@@ -10,10 +10,13 @@ from isobmff import *
 
 def get_offsets(segment_file_name):
     offsets = defaultdict(list)
-    last_pes = {}
+    last_pts = {}
     pes_packet = None
     for pes_packet in read_pes(segment_file_name):
-        last_pes[pes_packet.pid] = pes_packet
+        if not pes_packet.pts:
+            continue
+        last_pts[pes_packet.pid] = max(
+            pes_packet.pts, last_pts.get(pes_packet.pid, pes_packet.pts))
         if pes_packet.random_access:
             logging.debug(
                 "Found TS packet with random_access_indicator = 1 at byte "
@@ -22,7 +25,7 @@ def get_offsets(segment_file_name):
             offsets[pes_packet.pid].append(offset)
 
     for pid in offsets:
-        offset = pes_packet.byte_offset, last_pes[pid].pts
+        offset = pes_packet.byte_offset, last_pts[pid]
         offsets[pid].append(offset)
     return offsets
 
