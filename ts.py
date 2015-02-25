@@ -15,6 +15,33 @@ def read_ts(file_name):
             yield TSPacket(ts_data, byte_offset)
 
 
+def read_pes(file_name):
+    pmt_pid = None
+    pes_readers = {}
+    for ts_packet in read_ts(file_name):
+        if ts_packet.pid == ProgramAssociationTable.PID:
+            pat = ProgramAssociationTable(ts_packet.payload)
+            programs = list(pat.programs.values())
+            if len(programs) != 1:
+                raise Exception("PAT has {} programs, but DASH only "
+                    "allows 1 program.".format(len(pat.programs)))
+            if pmt_pid is not None and programs[0] != pmt_pid:
+                raise Exception("PAT has new PMT PID. This program has "
+                    "not been tested to handled this case.")
+            pmt_pid = programs[0]
+
+        elif ts_packet.pid == pmt_pid:
+            pmt = ProgramMapTable(ts_packet.payload)
+            for pid in pmt.streams:
+                if pid not in pes_readers:
+                    pes_readers[pid] = PESReader()
+
+        elif ts_packet.pid in pes_readers:
+            pes_packet = pes_readers[ts_packet.pid].add_ts_packet(ts_packet)
+            if pes_packet:
+                yield pes_packet
+
+
 class TSPacket(object):
     SYNC_BYTE = 0x47
     SIZE = 188
@@ -318,6 +345,12 @@ class StreamID(object):
 
 class PESPacket(object):
     def __init__(self, data, ts_packets):
+        first_ts = ts_packets[0]
+        self.pid = first_ts.pid
+        self.byte_offset = first_ts.byte_offset
+        self.size = len(ts_packets) * TSPacket.SIZE
+        self.random_access = first_ts.random_access_indicator
+
         self.ts_packets = ts_packets
         data = BitStream(data)
 

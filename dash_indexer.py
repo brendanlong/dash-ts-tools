@@ -9,39 +9,16 @@ from isobmff import *
 
 def get_offsets(media_file_name):
     byte_offsets = defaultdict(list)
-    pmt_pid = None
-    pes_readers = {}
-    for ts_packet in read_ts(media_file_name):
-        if ts_packet.pid == ProgramAssociationTable.PID:
-            pat = ProgramAssociationTable(ts_packet.payload)
-            programs = list(pat.programs.values())
-            if len(programs) != 1:
-                raise Exception("PAT has {} programs, but DASH only "
-                    "allows 1 program.".format(len(pat.programs)))
-            if pmt_pid is not None and programs[0] != pmt_pid:
-                raise Exception("PAT has new PMT PID. This program has "
-                    "not been tested to handled this case.")
-            pmt_pid = programs[0]
-
-        elif ts_packet.pid == pmt_pid:
-            pmt = ProgramMapTable(ts_packet.payload)
-            for pid in pmt.streams:
-                if pid not in pes_readers:
-                    pes_readers[pid] = PESReader()
-
-        elif ts_packet.pid in pes_readers:
-            pes_packet = pes_readers[ts_packet.pid].add_ts_packet(ts_packet)
-            if pes_packet:
-                pass
-
-            if ts_packet.random_access_indicator:
-                logging.debug("Found TS packet with "
-                    "random_access_indicator = 1 at byte offset %s for "
-                    "PID %s", ts_packet.byte_offset, ts_packet.pid)
-                byte_offsets[ts_packet.pid].append(ts_packet.byte_offset)
+    for pes_packet in read_pes(media_file_name):
+        if pes_packet.random_access:
+            logging.debug("Found TS packet with "
+                "random_access_indicator = 1 at byte offset %s for "
+                "PID %s", pes_packet.byte_offset, pes_packet.pid)
+            byte_offsets[pes_packet.pid].append(pes_packet.byte_offset)
 
     for pid in byte_offsets:
-        byte_offsets[pid].append(ts_packet.byte_offset + TSPacket.SIZE)
+        byte_offsets[pid].append(pes_packet.byte_offset + pes_packet.size)
+    print(dict(byte_offsets))
     return byte_offsets
 
 
