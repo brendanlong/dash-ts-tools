@@ -42,6 +42,8 @@ def index_media_segment(media_file_name, template, force):
             reference = SidxReference(SidxReference.ReferenceType.MEDIA)
             reference.referenced_size = byte_offset - previous_start_byte
             reference.subsegment_duration = time_offset - previous_start_time
+            reference.starts_with_sap = 1
+            reference.sap_type = 1
             sidx.references.append(reference)
             previous_start_byte = byte_offset
             previous_start_time = time_offset
