@@ -63,6 +63,7 @@ class TSPacket(object):
     SIZE = 188
 
     def __init__(self, data, byte_offset):
+        self.bytes = data
         self.byte_offset = byte_offset
 
         data = BitStream(data)
@@ -203,6 +204,10 @@ class ProgramAssociationTable(object):
     def __repr__(self):
         return to_json(self)
 
+    def __eq__(self, other):
+        return isinstance(other, ProgramAssociationTable) \
+            and self.__dict__ == other.__dict__
+
 
 class Descriptor(object):
     def __init__(self, data):
@@ -216,6 +221,10 @@ class Descriptor(object):
 
     def __repr__(self):
         return to_json(self)
+
+    def __eq__(self, other):
+        return isinstance(other, Descriptor) \
+            and self.__dict__ == other.__dict__
 
     @staticmethod
     def read_descriptors(data, size):
@@ -239,6 +248,10 @@ class Stream(object):
         data.read(4)  # reserved
         es_info_length = data.read("uint:12")
         self.descriptors = Descriptor.read_descriptors(data, es_info_length)
+
+    def __eq__(self, other):
+        return isinstance(other, Stream) \
+            and self.__dict__ == other.__dict__
 
 
 class ProgramMapTable(object):
@@ -290,6 +303,10 @@ class ProgramMapTable(object):
 
     def __repr__(self):
         return to_json(self)
+
+    def __eq__(self, other):
+        return isinstance(other, ProgramMapTable) \
+            and self.__dict__ == other.__dict__
 
 
 class PESReader(object):
