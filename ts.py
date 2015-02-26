@@ -147,7 +147,8 @@ class TSPacket(object):
                         self.splice_type = data.read("uint:4")
                         self.dts_next_au = read_timestamp("DTS_next_AU", data)
 
-                data.read(((adaptation_field_length + 5) - data.bytepos) * 8)
+                # Skip the rest of the header and padding bytes
+                data.bytepos = adaptation_field_length + 5
 
         if has_payload:
             self.payload = data.read("bytes")
@@ -350,6 +351,7 @@ class StreamID(object):
 
 class PESPacket(object):
     def __init__(self, data, ts_packets):
+        self.bytes = data
         first_ts = ts_packets[0]
         self.pid = first_ts.pid
         self.byte_offset = first_ts.byte_offset
@@ -401,6 +403,13 @@ class PESPacket(object):
                     raise Exception("2 bits before DTS should be 0x1 but saw "
                                     "0x{:02X}".format(bits))
                 self.dts = read_timestamp("DTS", data)
+
+            # skip the rest of the header and stuffing bytes
+            data.bytepos = pes_header_data_length + 9
+        if self.stream_id == StreamID.PADDING:
+            self.payload = None
+        else:
+            self.payload = data.read("bytes")
 
     def __repr__(self):
         d = self.__dict__.copy()
