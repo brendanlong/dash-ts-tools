@@ -42,6 +42,22 @@ def read_pes(file_name):
                 yield pes_packet
 
 
+def read_timestamp(name, data):
+    timestamp = data.read("uint:3")
+    if not data.read("bool"):
+        raise Exception("First marker bit in {} section of header is not "
+                        "1.".format(name))
+    timestamp = (timestamp << 15) + data.read("uint:15")
+    if not data.read("bool"):
+        raise Exception("Second marker bit in {} section of header is not "
+                        "1.".format(name))
+    timestamp = (timestamp << 15) + data.read("uint:15")
+    if not data.read("bool"):
+        raise Exception("Third marker bit in {} section of header is not "
+                        "1.".format(name))
+    return timestamp
+
+
 class TSPacket(object):
     SYNC_BYTE = 0x47
     SIZE = 188
@@ -129,23 +145,7 @@ class TSPacket(object):
 
                     if seamless_splice_flag:
                         self.splice_type = data.read("uint:4")
-                        self.dts_next_au = data.read("uint:3")
-                        if not data.read("bool"):
-                            raise Exception(
-                                "First marker bit in seamless splice "
-                                "section of header is not 1.")
-                        self.ts_next_au = (self.ts_next_au << 15) + data.read(
-                            "uint:15")
-                        if not data.read("bool"):
-                            raise Exception(
-                                "Second marker bit in seamless splice "
-                                "section of header is not 1.")
-                        self.ts_next_au = (self.ts_next_au << 15) + data.read(
-                            "uint:15")
-                        if not data.read("bool"):
-                            raise Exception(
-                                "Third marker bit in seamless splice "
-                                "section of header is not 1.")
+                        self.dts_next_au = read_timestamp("DTS_next_AU", data)
 
                 data.read(((adaptation_field_length + 5) - data.bytepos) * 8)
 
@@ -390,39 +390,17 @@ class PESPacket(object):
             if pts_dts_flags & 2:
                 bits = data.read("uint:4")
                 if bits != pts_dts_flags:
-                    raise Exception("2 bits before PTS should be 0x{:02X} "
-                                    "but saw 0x{:02X}".format(pts_dts_flags,
-                        bits))
-                self.pts = data.read("uint:3")
-                if not data.read("bool"):
-                    raise Exception("First marker bit in PTS section of PES "
-                                    "header is not 1.")
-                self.pts = (self.pts << 15) + data.read("uint:15")
-                if not data.read("bool"):
-                    raise Exception("Second marker bit in PTS section of PES "
-                                    "header is not 1.")
-                self.pts = (self.pts << 15) + data.read("uint:15")
-                if not data.read("bool"):
-                    raise Exception("Third marker bit in PTS section of PES "
-                                    "header is not 1.")
+                    raise Exception(
+                        "2 bits before PTS should be 0x{:02X} but saw 0x{"
+                        ":02X}".format(pts_dts_flags, bits))
+                self.pts = read_timestamp("PTS", data)
 
             if pts_dts_flags & 1:
                 bits = data.read("uint:4")
                 if bits != 0x1:
-                    raise Exception("2 bits before DTS should be 0x1 "
-                                    "but saw 0x{:02X}".format(bits))
-                self.dts = data.read("uint:3")
-                if not data.read("bool"):
-                    raise Exception("First marker bit in DTS section of PES "
-                                    "header is not 1.")
-                self.dts = (self.dts << 15) + data.read("uint:15")
-                if not data.read("bool"):
-                    raise Exception("Second marker bit in DTS section of PES "
-                                    "header is not 1.")
-                self.dts = (self.dts << 15) + data.read("uint:15")
-                if not data.read("bool"):
-                    raise Exception("Third marker bit in DTS section of PES "
-                                    "header is not 1.")
+                    raise Exception("2 bits before DTS should be 0x1 but saw "
+                                    "0x{:02X}".format(bits))
+                self.dts = read_timestamp("DTS", data)
 
     def __repr__(self):
         d = self.__dict__.copy()
