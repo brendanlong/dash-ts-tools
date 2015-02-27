@@ -28,6 +28,7 @@ def generate_initialization_segment(
     segment_ts = {}
     pmt_pid = None
     for segment_file_name in segment_file_names:
+        logging.info("Reading %s", segment_file_name)
         current_segment_ts = []
         segment_ts[segment_file_name] = current_segment_ts
         for ts in read_ts(segment_file_name):
@@ -81,7 +82,7 @@ if __name__ == "__main__":
         help="Template for segment index files. {name_part} will be replaced "
              "with the file name of the media segment minus the suffix (.ts). "
              "{path} will be replaced with the full path to the media segment.",
-        default="{path}/{name_part}.sidx")
+        default="{path}/{name_part}.ts")
     parser.add_argument(
         "--out", "-o", required=True,
         help="The file to write the initialization segment to.")
