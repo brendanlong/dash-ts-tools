@@ -152,7 +152,7 @@ def encrypted_ts_packets(media_segment, pcr_pid_start, initialization_segment):
                     stream.descriptors.append(ca_descriptor)
                 ts_packet.payload = pmt.bytes
 
-            elif not ts_packet.random_access_indicator \
+            elif not ts_packet.payload_unit_start_indicator \
                     and ts_packet.pid in pcr_pids:
                 scrambling_control = random.randint(1, 3)
                 cets_ecm = CetsEcm(b"1234567890123456")
