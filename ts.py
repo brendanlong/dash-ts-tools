@@ -73,7 +73,6 @@ class TSPacket(object):
     SIZE = 188
 
     def __init__(self, data, byte_offset):
-        self.bytes = data
         self.byte_offset = byte_offset
 
         data = BitStream(data)
@@ -165,6 +164,107 @@ class TSPacket(object):
             self.payload = data.read("bytes")
         else:
             self.payload = None
+
+    @property
+    def bytes(self):
+        adaptation_field_length = 1
+        if self.program_clock_reference_base is not None:
+            adaptation_field_length += 6
+        if self.original_program_clock_reference_base is not None:
+            adaptation_field_length += 6
+        if self.splice_countdown is not None:
+            adaptation_field_length += 1
+        if self.private_data is not None:
+            adaptation_field_length += len(self.private_data)
+
+        adaptation_field_extension_length = 1
+        if self.ltw_valid_flag is not None:
+            adaptation_field_extension_length += 2
+        if self.piecewise_rate is not None:
+            adaptation_field_extension_length += 3
+        if self.splice_type is not None:
+            adaptation_field_extension_length += 5
+
+        if adaptation_field_extension_length > 1:
+            adaptation_field_length += adaptation_field_extension_length
+
+        binary = bitstring.pack(
+            "uint:8, bool, bool, bool, uint:13, uint:2, bool, bool, uint:4",
+            self.SYNC_BYTE, self.transport_error_indicator,
+            self.payload_unit_start_indicator, self.transport_priority,
+            self.pid, self.scrambling_control, adaptation_field_length > 1,
+            self.payload is not None, self.continuity_counter)
+
+        if adaptation_field_length > 1:
+            binary.append(bitstring.pack(
+                "uint:8, bool, bool, bool, bool, bool, bool, bool, bool",
+                adaptation_field_length, self.discontinuity_indicator,
+                self.random_access_indicator,
+                self.elementary_stream_priority_indicator,
+                self.program_clock_reference_base is not None,
+                self.original_program_clock_reference_base is not None,
+                self.splice_countdown is not None,
+                self.private_data is not None,
+                adaptation_field_extension_length > 1))
+
+            if self.program_clock_reference_base is not None:
+                binary.append(bitstring.pack(
+                    "uint:33, pad:6, uint:9",
+                    self.program_clock_reference_base,
+                    self.program_clock_reference_extension))
+
+            if self.original_program_clock_reference_base:
+                binary.append(bitstring.pack(
+                    "uint:33, pad:6, uint:9",
+                    self.original_program_clock_reference_base,
+                    self.original_program_clock_reference_extension))
+
+            if self.splice_countdown:
+                binary.append(bitstring.pack("uint:8", self.splice_coundown))
+
+            if self.private_data is not None:
+                binary.append(bitstring.pack(
+                    "uint:8, bytes",
+                    len(self.private_data), self.private_data))
+
+            if adaptation_field_extension_length > 1:
+                binary.append(bitstring.pack(
+                    "uint:8, bool, bool, bool, pad:5",
+                    adaptation_field_extension_length,
+                    self.ltw_valid_flag is not None,
+                    self.piecewise_rate is not None,
+                    self.splice_type is not None))
+
+                if self.ltw_valid_flag is not None:
+                    binary.append(bitstring.pack(
+                        "bool, uint:15",
+                        self.ltw_valid_flag, self.ltw_offset))
+
+                if self.piecewise_rate is not None:
+                    binary.append(bitstring.pack(
+                        "pad:2, uint:22", self.piecewise_rate))
+
+                if self.splice_type is not None:
+                    binary.append(bitstring.pack(
+                        "uint:4, uint:3, bool, uint:15, bool, uint:15, bool",
+                        self.splice_type,
+                        self.dts_next_au >> 30, 1,
+                        (self.dts_next_au >> 15) & 0x7FFF, 1,
+                        self.dts_next_au & 0x7FFF, 1))
+                    self.splice_type = data.read("uint:4")
+                    self.dts_next_au = read_timestamp("DTS_next_AU", data)
+
+        if self.payload is not None:
+            binary.append(self.payload)
+
+        if (len(binary) / 8) > 188:
+            raise Exception(
+                "TS Packet is %s bytes long, but max size is 188 bytes." \
+                % (binary.bytelen))
+
+        while (len(binary) / 8) < 188:
+            binary.append(bitstring.pack("uint:8", 0xFF))
+        return binary.bytes
 
     def __repr__(self):
         return to_json(self)
@@ -273,7 +373,7 @@ class Descriptor(object):
             binary.append(self.private_data_bytes)
         else:
             binary.append(self.contents)
-        return binary
+        return binary.bytes
 
     def __repr__(self):
         return to_json(self)
@@ -322,6 +422,7 @@ class Stream(object):
             self.stream_type, self.elementary_pid, es_info_length)
         for descriptor in self.descriptors:
             binary.append(descriptor.bytes)
+        return binary.bytes
 
     def __eq__(self, other):
         return isinstance(other, Stream) \
@@ -406,7 +507,7 @@ class ProgramMapTable(object):
             binary.append(stream.bytes)
         # TODO: Is this the right CRC-32 polynomial?
         binary.append(bitstring.pack("uint:32", zlib.crc32(binary.bytes)))
-        return binary
+        return binary.bytes
 
     def __repr__(self):
         return to_json(self)

@@ -57,6 +57,7 @@ def encrypted_ts_packets(media_segment, pcr_pid_start, initialization_segment):
 
 def encrypt_segment(media_segment, output_file, pcr_pid_start,
         initialization_segment, force=False):
+    logging.info("Reading %s and writing %s" % (media_segment, output_file))
     if os.path.exists(output_file) and not force:
         choice = input(
             "File %s exists, do you want to overwrite it? [y/N] " \
