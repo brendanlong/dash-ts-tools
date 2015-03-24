@@ -70,7 +70,7 @@ def read_timestamp(name, data):
 
 class TSPacket(object):
     SYNC_BYTE = 0x47
-    SIZE = 188
+    SIZE = size = 188
 
     def __init__(self, pid):
         self.transport_error_indicator = False
@@ -274,6 +274,7 @@ class TSPacket(object):
 
         while (len(binary) / 8) < 188:
             binary.append(bitstring.pack("uint:8", 0xFF))
+        assert(len(binary) / 8 == self.size)
         return binary.bytes
 
     def __repr__(self):
@@ -329,37 +330,56 @@ class ProgramAssociationTable(object):
             and self.__dict__ == other.__dict__
 
 
+class CetsEcmSystem(object):
+    def __init__(self, system_id, pssh_pid):
+        self.system_id = system_id
+        self.pssh_pid = pssh_pid
+
+    @property
+    def size(self):
+        return 18
+
+    @property
+    def bytes(self):
+        return bitstring.pack(
+            "bytes:16, uint:13, pad:3",
+            self.system_id, self.pssh_id)
+
+
 class Descriptor(object):
     TAG_CA_DESCRIPTOR = 9
 
-    def __init__(self, data=None):
-        if data:
-            self.tag = data.read("uint:8")
-            length = data.read("uint:8")
-            start = data.bytepos
-            if self.tag == self.TAG_CA_DESCRIPTOR:
-                self.ca_system_id = data.read("bytes:2")
+    def __init__(self, tag):
+        self.tag = tag
+        self.contents = b""
+
+    @staticmethod
+    def parse(data):
+        desc = Descriptor(data.read("uint:8"))
+        length = data.read("uint:8")
+        if desc.tag == desc.TAG_CA_DESCRIPTOR:
+            desc.ca_system_id = data.read("bytes:2")
+            data.read(3) # reserved
+            desc.ca_pid = data.read("uint:13")
+            desc.scheme_type = data.read("uint:32")
+            desc.scheme_version = data.read("uint:32")
+            num_systems = data.read("uint:8")
+            desc.encryption_algorithm = data.read("uint:24")
+            desc.systems = []
+            for i in range(self.num_systems):
+                desc.systems.append(CetsEcmSystem(
+                    data.read("bytes:16"),
+                    data.read("uint:13")))
                 data.read(3) # reserved
-                self.ca_pid = data.read("uint:13")
-                self.scheme_type = data.read("uint:32")
-                self.scheme_version = data.read("uint:32")
-                num_systems = data.read("uint:8")
-                self.encryption_algorithm = data.read("uint:24")
-                self.systems = []
-                for i in range(self.num_systems):
-                    self.systems.append({
-                        "system_id": data.read("bytes:16"),
-                        "pssh_pid": data.read("uint:13")
-                    })
-                    data.read(3) # reserved
-                self.private_data_bytes = data.read((length - start) * 8).bytes
-            else:
-                self.contents = data.read(length * 8).bytes
+            desc.private_data_bytes = data.read((length - start) * 8).bytes
+        else:
+            desc.contents = data.read(length * 8).bytes
+        return desc
 
     @property
     def length(self):
         if self.tag == self.TAG_CA_DESCRIPTOR:
-            return 18 + (len(self.systems) * 18) + len(self.private_data_bytes)
+            return 16 + (len(self.systems) * 18) + len(self.private_data_bytes)
         else:
             return len(self.contents)
 
@@ -383,6 +403,7 @@ class Descriptor(object):
             binary.append(self.private_data_bytes)
         else:
             binary.append(self.contents)
+        assert(len(binary) / 8 == self.size)
         return binary.bytes
 
     def __repr__(self):
@@ -397,11 +418,11 @@ class Descriptor(object):
         total = 0
         descriptors = []
         while total < size:
-            descriptor = Descriptor(data)
+            descriptor = Descriptor.parse(data)
             descriptors.append(descriptor)
             total += descriptor.size
         if total != size:
-            raise Exception("Excepted {} byts of descriptors, but got "
+            raise Exception("Excepted {} bytes of descriptors, but got "
                             "{} bytes of descriptors.".format(size, total))
         return descriptors
 

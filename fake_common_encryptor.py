@@ -34,6 +34,7 @@ class CetsEcmAu(object):
         if self.au_byte_offset is not None:
             binary.append(self.au_byte_offset)
         binary.append(self.initialization_vector)
+        assert(len(binary) / 8 == self.size)
         return binary.bytes
 
 
@@ -55,6 +56,7 @@ class CetsEcmState(object):
             "uint:2, uint:6", self.transport_scrambling_control, len(self.au))
         for au in self.au:
             binary.append(au.bytes)
+        assert(len(binary) / 8 == self.size)
         return binary.bytes
 
 
@@ -68,7 +70,7 @@ class CetsEcm(object):
     @property
     def size(self):
         total = 18
-        for state in self.state:
+        for state in self.states.values():
             total += state.size
         if self.countdown_sec is not None:
             total += 17
@@ -101,6 +103,7 @@ class CetsEcm(object):
         # Add two bits to make this end at a byte boundary
         # Need to tell MPEG about this
         binary.append(bitstring.pack("pad:2"))
+        assert(len(binary) / 8 == self.size)
         return binary.bytes
 
     def __repr__(self):
@@ -137,8 +140,7 @@ def encrypted_ts_packets(media_segment, pcr_pid_start, initialization_segment):
                         if descriptor.tag == Descriptor.TAG_CA_DESCRIPTOR:
                             raise Exception("Stream already has "
                                             "CA_descriptor")
-                    ca_descriptor = Descriptor()
-                    ca_descriptor.tag = Descriptor.TAG_CA_DESCRIPTOR
+                    ca_descriptor = Descriptor(Descriptor.TAG_CA_DESCRIPTOR)
                     ca_descriptor.ca_system_id = b"ce"
                     ca_descriptor.ca_pid = pcr_pids[pid]
                     ca_descriptor.scheme_type = 0
