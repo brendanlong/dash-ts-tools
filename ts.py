@@ -1,9 +1,11 @@
 from itertools import count
 import logging
-
-from bitstring import BitStream
-from common import to_json
 import struct
+import zlib
+
+import bitstring
+from bitstring import BitArray, BitStream
+from common import to_json
 
 
 def read_ts(file_name):
@@ -218,14 +220,60 @@ class ProgramAssociationTable(object):
 
 
 class Descriptor(object):
-    def __init__(self, data):
-        self.tag = data.read("uint:8")
-        length = data.read("uint:8")
-        self.contents = data.read(length * 8).bytes
+    TAG_CA_DESCRIPTOR = 9
+
+    def __init__(self, data=None):
+        if data:
+            self.tag = data.read("uint:8")
+            length = data.read("uint:8")
+            start = data.bytepos
+            if self.tag == self.TAG_CA_DESCRIPTOR:
+                self.ca_system_id = data.read("bytes:2")
+                data.read(3) # reserved
+                self.ca_pid = data.read("uint:13")
+                self.scheme_type = data.read("uint:32")
+                self.scheme_version = data.read("uint:32")
+                num_systems = data.read("uint:8")
+                self.encryption_algorithm = data.read("uint:24")
+                self.systems = []
+                for i in range(self.num_systems):
+                    self.systems.append({
+                        "system_id": data.read("bytes:16"),
+                        "pssh_pid": data.read("uint:13")
+                    })
+                    data.read(3) # reserved
+                self.private_data_bytes = data.read((length - start) * 8).bytes
+            else:
+                self.contents = data.read(length * 8).bytes
+
+    @property
+    def length(self):
+        if self.tag == self.TAG_CA_DESCRIPTOR:
+            return 18 + (len(self.systems) * 18) + len(self.private_data_bytes)
+        else:
+            return len(self.contents)
 
     @property
     def size(self):
-        return 2 + len(self.contents)
+        return 2 + self.length
+
+    @property
+    def bytes(self):
+        binary = bitstring.pack("uint:8, uint:8", self.tag, self.length)
+        if self.tag == self.TAG_CA_DESCRIPTOR:
+            binary.append(self.ca_system_id)
+            binary.append(bitstring.pack(
+                "pad:3, uint:13, uint:32, uint:32, uint:8, uint:24",
+                self.ca_pid, self.scheme_type, self.scheme_version,
+                len(self.systems), self.encryption_algorithm))
+            for system in self.systems:
+                binary.append(system["system_id"])
+                binary.append(
+                    bitstring.pack("uint:13, pad:3", system["pssh_pid"]))
+            binary.append(self.private_data_bytes)
+        else:
+            binary.append(self.contents)
+        return binary
 
     def __repr__(self):
         return to_json(self)
@@ -257,9 +305,30 @@ class Stream(object):
         es_info_length = data.read("uint:12")
         self.descriptors = Descriptor.read_descriptors(data, es_info_length)
 
+    @property
+    def size(self):
+        total = 5
+        for descriptor in self.descriptors:
+            total += descriptor.size
+        return total
+
+    @property
+    def bytes(self):
+        es_info_length = 0
+        for descriptor in self.descriptors:
+            es_info_length += descriptor.size
+        binary = bitstring.pack(
+            "uint:8, pad:3, uint:13, pad:4, uint:12",
+            self.stream_type, self.elementary_pid, es_info_length)
+        for descriptor in self.descriptors:
+            binary.append(descriptor.bytes)
+
     def __eq__(self, other):
         return isinstance(other, Stream) \
             and self.__dict__ == other.__dict__
+
+    def __repr__(self):
+        return to_json(self.__dict__)
 
 
 class ProgramMapTable(object):
@@ -306,8 +375,38 @@ class ProgramMapTable(object):
         while data.bytepos < len(data.bytes):
             padding_byte = data.read("uint:8")
             if padding_byte != 0xFF:
-                raise Exception("Padding byte at end of PAT was 0x{:02X} but "
+                raise Exception("Padding byte at end of PMT was 0x{:02X} but "
                                 "should be 0xFF".format(padding_byte))
+
+    @property
+    def bytes(self):
+        binary = bitstring.pack(
+            "pad:8, uint:8, bool, bool, pad:2",
+            self.TABLE_ID, self.section_syntax_indicator,
+            self.private_indicator)
+
+        program_info_length = 0
+        for descriptor in self.descriptors:
+            program_info_length += descriptor.size
+
+        length = 13 + program_info_length
+        for stream in self.streams.values():
+            length += stream.size
+
+        binary.append(bitstring.pack(
+            "uint:12, uint:16, pad:2, uint:5, bool, uint:8, uint:8, pad:3," +
+            "uint:13, pad:4, uint:12",
+            length, self.program_number, self.version_number,
+            self.current_next_indicator, self.section_number,
+            self.last_section_number, self.pcr_pid, program_info_length))
+
+        for descriptor in self.descriptors:
+            binary.append(descriptor.bytes)
+        for stream in self.streams.values():
+            binary.append(stream.bytes)
+        # TODO: Is this the right CRC-32 polynomial?
+        binary.append(bitstring.pack("uint:32", zlib.crc32(binary.bytes)))
+        return binary
 
     def __repr__(self):
         return to_json(self)
