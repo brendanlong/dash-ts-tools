@@ -6,6 +6,10 @@ import zlib
 import bitstring
 from bitstring import BitArray, BitStream
 from common import to_json
+import crcmod
+
+
+crc32 = crcmod.predefined.mkCrcFun("crc-32-mpeg")
 
 
 def read_ts(file_name):
@@ -314,7 +318,12 @@ class ProgramAssociationTable(object):
             data.read(3)  # reserved
             pid = data.read("uint:13")
             self.programs[program_number] = pid
-        self.crc = data.read("uint:32")
+        data.read("uint:32") # crc
+        calculated_crc = crc32(data.bytes[pointer_field + 1:data.bytepos])
+        if calculated_crc != 0:
+            raise Exception(
+                "CRC of entire PAT should be 0, but saw %s." \
+                % (calculated_crc))
 
         while data.bytepos < len(data.bytes):
             padding_byte = data.read("uint:8")
@@ -502,7 +511,12 @@ class ProgramMapTable(object):
             stream = Stream(data)
             self.streams[stream.elementary_pid] = stream
 
-        self.crc = data.read("uint:32")
+        data.read("uint:32") # crc
+        calculated_crc = crc32(data.bytes[pointer_field + 1:data.bytepos])
+        if calculated_crc != 0:
+            raise Exception(
+                "CRC of entire PMT should be 0, but saw %s." \
+                % (calculated_crc))
 
         while data.bytepos < len(data.bytes):
             padding_byte = data.read("uint:8")
@@ -536,8 +550,8 @@ class ProgramMapTable(object):
             binary.append(descriptor.bytes)
         for stream in self.streams.values():
             binary.append(stream.bytes)
-        # TODO: Is this the right CRC-32 polynomial?
-        binary.append(bitstring.pack("uint:32", zlib.crc32(binary.bytes)))
+
+        binary.append(bitstring.pack("uint:32", crc32(binary.bytes[1:])))
         return binary.bytes
 
     def __repr__(self):
