@@ -2,6 +2,7 @@
 import argparse
 import bitstring
 import itertools
+import multiprocessing
 import os
 import random
 
@@ -172,8 +173,9 @@ def encrypted_ts_packets(media_segment, pcr_pid_start, initialization_segment):
             yield ts_packet
 
 
-def encrypt_segment(media_segment, output_file, pcr_pid_start,
-        initialization_segment, force=False):
+def encrypt_segment(args):
+    media_segment, output_file, pcr_pid_start, \
+        initialization_segment, force = args
     logging.info("Reading %s and writing %s" % (media_segment, output_file))
     if os.path.exists(output_file) and not force:
         choice = input(
@@ -212,10 +214,12 @@ if __name__ == "__main__":
     logging.basicConfig(
         format='%(levelname)s: %(message)s',
         level=logging.DEBUG if args.verbose else logging.INFO)
+    os.makedirs(args.output_directory, exist_ok=True)
+    arguments = []
     for segment in args.media_segment:
-        os.makedirs(args.output_directory, exist_ok=True)
         output_file = os.path.join(
             args.output_directory, os.path.basename(segment))
-        encrypt_segment(
+        arguments.append((
             segment, output_file, args.pcr_pid_start,
-            args.initialization_segment, args.force)
+            args.initialization_segment, args.force))
+    multiprocessing.Pool().map(encrypt_segment, arguments)
