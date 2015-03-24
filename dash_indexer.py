@@ -8,11 +8,11 @@ from ts import *
 from isobmff import *
 
 
-def get_offsets(segment_file_name):
+def get_offsets(segment_file_name, initialization_segment):
     offsets = defaultdict(list)
     last_pts = {}
     pes_packet = None
-    for pes_packet in read_pes(segment_file_name):
+    for pes_packet in read_pes(segment_file_name, initialization_segment):
         if not pes_packet.pts:
             continue
         last_pts[pes_packet.pid] = max(
@@ -30,9 +30,9 @@ def get_offsets(segment_file_name):
     return offsets
 
 
-def get_segment_indexes(segment_file_name):
+def get_segment_indexes(segment_file_name, initialization_segment):
     logging.info("Generating segment index for %s", segment_file_name)
-    offsets = get_offsets(segment_file_name)
+    offsets = get_offsets(segment_file_name, initialization_segment)
 
     boxes = []
     for pid, offsets in offsets.items():
@@ -86,8 +86,10 @@ def write_boxes(segment_file_name, name_part, template, boxes, force):
                 f.write(box.bytes)
 
 
-def index_media_segments(segment_file_names, template, index_type, force):
-    indexes = {file_name: get_segment_indexes(file_name)
+def index_media_segments(
+        segment_file_names, template, index_type,
+        initialization_segment, force):
+    indexes = {file_name: get_segment_indexes(file_name, initialization_segment)
                for file_name in segment_file_names}
 
     logging.debug("Boxes to write are:")
@@ -145,6 +147,9 @@ if __name__ == "__main__":
         "--index-type", "-i", type=IndexType.from_string,
         default=IndexType.SINGLE_SEGMENT_INDEX, help="The type of ")
     parser.add_argument(
+        "--initialization-segment", "-s", help="The initialization segment "
+                                               "for the representation")
+    parser.add_argument(
         "--force", "-f", action="store_true", default=False,
         help="Overwrite output files without prompting.")
     parser.add_argument(
@@ -156,4 +161,5 @@ if __name__ == "__main__":
         format='%(levelname)s: %(message)s',
         level=logging.DEBUG if args.verbose else logging.INFO)
     index_media_segments(
-        args.media_segment, args.template, args.index_type, args.force)
+        args.media_segment, args.template, args.index_type,
+        args.initialization_segment, args.force)
