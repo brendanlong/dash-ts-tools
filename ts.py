@@ -181,16 +181,6 @@ class TSPacket(object):
 
     @property
     def bytes(self):
-        adaptation_field_length = 1
-        if self.program_clock_reference_base is not None:
-            adaptation_field_length += 6
-        if self.original_program_clock_reference_base is not None:
-            adaptation_field_length += 6
-        if self.splice_countdown is not None:
-            adaptation_field_length += 1
-        if self.private_data is not None:
-            adaptation_field_length += len(self.private_data)
-
         adaptation_field_extension_length = 1
         if self.ltw_valid_flag is not None:
             adaptation_field_extension_length += 2
@@ -199,27 +189,48 @@ class TSPacket(object):
         if self.splice_type is not None:
             adaptation_field_extension_length += 5
 
-        if adaptation_field_extension_length > 1:
-            adaptation_field_length += adaptation_field_extension_length
+        # adaptation field stuffing bytes
+        if self.payload is not None:
+            adaptation_field_length = 188 - len(self.payload) - 5
+        else:
+            adaptation_field_length = 0
+            if self.program_clock_reference_base is not None:
+                adaptation_field_length += 6
+            if self.original_program_clock_reference_base is not None:
+                adaptation_field_length += 6
+            if self.splice_countdown is not None:
+                adaptation_field_length += 1
+            if self.private_data is not None:
+                adaptation_field_length += len(self.private_data)
+            if adaptation_field_extension_length > 1:
+                adaptation_field_length += adaptation_field_extension_length
+
+            if adaptation_field_length > 0:
+                adaptation_field_length += 1
 
         binary = bitstring.pack(
             "uint:8, bool, bool, bool, uint:13, uint:2, bool, bool, uint:4",
             self.SYNC_BYTE, self.transport_error_indicator,
             self.payload_unit_start_indicator, self.transport_priority,
-            self.pid, self.scrambling_control, adaptation_field_length > 1,
+            self.pid, self.scrambling_control, adaptation_field_length >= 0,
             self.payload is not None, self.continuity_counter)
 
-        if adaptation_field_length > 1:
+        if adaptation_field_length >= 0:
             binary.append(bitstring.pack(
-                "uint:8, bool, bool, bool, bool, bool, bool, bool, bool",
-                adaptation_field_length, self.discontinuity_indicator,
-                self.random_access_indicator,
-                self.elementary_stream_priority_indicator,
-                self.program_clock_reference_base is not None,
-                self.original_program_clock_reference_base is not None,
-                self.splice_countdown is not None,
-                self.private_data is not None,
-                adaptation_field_extension_length > 1))
+                "uint:8",
+                adaptation_field_length))
+
+            if adaptation_field_length > 0:
+                binary.append(bitstring.pack(
+                    "bool, bool, bool, bool, bool, bool, bool, bool",
+                    self.discontinuity_indicator,
+                    self.random_access_indicator,
+                    self.elementary_stream_priority_indicator,
+                    self.program_clock_reference_base is not None,
+                    self.original_program_clock_reference_base is not None,
+                    self.splice_countdown is not None,
+                    self.private_data is not None,
+                    adaptation_field_extension_length > 1))
 
             if self.program_clock_reference_base is not None:
                 binary.append(bitstring.pack(
@@ -268,17 +279,16 @@ class TSPacket(object):
                     self.splice_type = data.read("uint:4")
                     self.dts_next_au = read_timestamp("DTS_next_AU", data)
 
+            while (len(binary) / 8) < adaptation_field_length + 5:
+                binary.append(bitstring.pack("uint:8", 0xFF))
+
         if self.payload is not None:
             binary.append(self.payload)
 
-        if (len(binary) / 8) > 188:
+        if (len(binary) / 8) != 188:
             raise Exception(
-                "TS Packet is %s bytes long, but max size is 188 bytes." \
+                "TS Packet is %s bytes long, but should be exactly 188 bytes." \
                 % (binary.bytelen))
-
-        while (len(binary) / 8) < 188:
-            binary.append(bitstring.pack("uint:8", 0xFF))
-        assert(len(binary) / 8 == self.size)
         return binary.bytes
 
     def __repr__(self):
