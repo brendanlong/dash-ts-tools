@@ -12,7 +12,7 @@ from ts import *
 class CetsEcmAu(object):
     def __init__(self, initialization_vector):
         self.key_id = None
-        self.au_byte_offset = None
+        self.byte_offset = None
         self.initialization_vector = initialization_vector
 
     @property
@@ -20,8 +20,8 @@ class CetsEcmAu(object):
         total = 1 + len(self.initialization_vector)
         if self.key_id is not None:
             total += len(self.key_id)
-        if self.au_byte_offset is not None:
-            total += len(self.au_byte_offset)
+        if self.byte_offset is not None:
+            total += len(self.byte_offset)
         return total
 
     @property
@@ -29,11 +29,11 @@ class CetsEcmAu(object):
         binary = bitstring.pack(
             "bool, pad:3, uint:4",
             self.key_id is not None,
-            len(self.au_byte_offset) if self.au_byte_offset is not None else 0)
+            len(self.byte_offset) if self.byte_offset is not None else 0)
         if self.key_id is not None:
             binary.append(self.key_id)
-        if self.au_byte_offset is not None:
-            binary.append(self.au_byte_offset)
+        if self.byte_offset is not None:
+            binary.append(self.byte_offset)
         binary.append(self.initialization_vector)
         assert(len(binary) / 8 == self.size)
         return binary.bytes
@@ -99,7 +99,7 @@ class CetsEcm(object):
             binary.append(state.bytes)
         if self.countdown_sec is not None:
             binary.append(bitstring.pack(
-                "uint:4, uint:4, bytes:16",
+                "uint:4, pad:4, bytes:16",
                 self.countdown_sec, self.next_key_id))
         # Add two bits to make this end at a byte boundary
         # Need to tell MPEG about this
@@ -110,6 +110,9 @@ class CetsEcm(object):
     def __repr__(self):
         return to_json(self)
 
+def random_bytes(num):
+    return bytes([random.randint(0, 255)
+                  for i in range(num)])
 
 def encrypted_ts_packets(media_segment, pcr_pid_start, initialization_segment):
     pcr_pid_generator = itertools.count(pcr_pid_start)
@@ -155,9 +158,9 @@ def encrypted_ts_packets(media_segment, pcr_pid_start, initialization_segment):
             elif not ts_packet.payload_unit_start_indicator \
                     and ts_packet.pid in pcr_pids:
                 scrambling_control = random.randint(1, 3)
-                cets_ecm = CetsEcm(b"1234567890123456")
+                cets_ecm = CetsEcm(random_bytes(16))
                 state = CetsEcmState(scrambling_control)
-                au = CetsEcmAu(b"FFFFFFFFFFFFFFFF")
+                au = CetsEcmAu(random_bytes(16))
                 state.au.append(au)
                 cets_ecm.states[scrambling_control] = state
 
@@ -167,8 +170,7 @@ def encrypted_ts_packets(media_segment, pcr_pid_start, initialization_segment):
 
                 ts_packet.scrambling_control = scrambling_control
                 # Random data looks like encrypted data..
-                ts_packet.payload = bytes([random.randint(0, 255)
-                                           for i in ts_packet.payload])
+                ts_packet.payload = bytes(random_bytes(len(ts_packet.payload)))
 
             yield ts_packet
 
