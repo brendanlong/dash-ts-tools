@@ -385,7 +385,7 @@ class Descriptor(object):
             num_systems = data.read("uint:8")
             desc.encryption_algorithm = data.read("uint:24")
             desc.systems = []
-            for i in range(self.num_systems):
+            for i in range(num_systems):
                 desc.systems.append(CetsEcmSystem(
                     data.read("bytes:16"),
                     data.read("uint:13")))
