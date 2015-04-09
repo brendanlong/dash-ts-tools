@@ -39,7 +39,7 @@ if __name__ == "__main__":
         else:
             input()
 
-    pmt_pid = None
+    pmt_pids = set()
     pes_readers = {}
     for ts_packet in read_ts(args.mpeg_ts_file):
         if args.show_ts and ts_packet.pid in args.filter:
@@ -50,17 +50,9 @@ if __name__ == "__main__":
             if args.show_pat and ts_packet.pid in args.filter:
                 print(pat)
                 wait()
-            programs = list(pat.programs.values())
-            if len(programs) != 1:
-                raise Exception("PAT has {} programs, but DASH only "
-                                "allows 1 program."
-                                .format(len(pat.programs)))
-            if pmt_pid is not None and programs[0] != pmt_pid:
-                raise Exception("PAT has new PMT PID. This program has "
-                                "not been tested to handled this case.")
-            pmt_pid = programs[0]
+            pmt_pids.update(pat.programs.values())
 
-        elif ts_packet.pid == pmt_pid:
+        elif ts_packet.pid in pmt_pids:
             pmt = ProgramMapTable(ts_packet.payload)
             if args.show_pmt and ts_packet.pid in args.filter:
                 print(pmt)
