@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from itertools import count
 import logging
 import struct
@@ -322,7 +323,7 @@ class ProgramAssociationTable(object):
         self.last_section_number = data.read("uint:8")
 
         num_programs = (section_length - 9) // 4
-        self.programs = {}
+        self.programs = OrderedDict()
         for _ in range(num_programs):
             program_number = data.read("uint:16")
             data.read(3)  # reserved
@@ -516,9 +517,12 @@ class ProgramMapTable(object):
         self.descriptors = Descriptor.read_descriptors(
             data, program_info_length)
 
-        self.streams = {}
+        self.streams = OrderedDict()
         while data.bytepos < section_length + 3 - 4:
             stream = Stream(data)
+            if stream.elementary_pid in self.streams:
+                raise Exception(
+                    "PMT contains the same elementary PID more than once.")
             self.streams[stream.elementary_pid] = stream
 
         data.read("uint:32") # crc
@@ -693,5 +697,6 @@ class PESPacket(object):
 
     def __repr__(self):
         d = self.__dict__.copy()
+        del d["bytes"]
         del d["ts_packets"]
         return to_json(d)
